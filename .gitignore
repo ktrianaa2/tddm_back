@@ -1,1 +1,4 @@
 .venv/
+# Ignorar carpetas __pycache__ y archivos .pyc
+__pycache__/
+*.pyc
