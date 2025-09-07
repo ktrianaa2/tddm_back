@@ -1,4 +1,47 @@
+# Entorno virtual
 .venv/
-# Ignorar carpetas __pycache__ y archivos .pyc
+env/
+venv/
+
+# Archivos de Python compilados
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+
+# Django
+*.log
+*.pot
+*.py[cod]
+*.sqlite3
+db.sqlite3
+/local_settings.py
+/staticfiles/
+media/
+*.bak
+
+# Archivos de migraciones
+*/migrations/*.py
+!*/migrations/__init__.py
+
+# IDEs / editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+
+# Pytest / testing
+.pytest_cache/
+nosetests.xml
+test-results.xml
