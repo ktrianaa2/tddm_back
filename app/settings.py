@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'requisitos',
     'casosdeuso',
     'historiasdeusuario',
+    'catalogos',
 ]
 
 MIDDLEWARE = [

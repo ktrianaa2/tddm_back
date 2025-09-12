@@ -2,14 +2,16 @@
 CREATE TABLE roles (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
-    descripcion TEXT
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de datos personales  
 CREATE TABLE datos_personales (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
-    apellido VARCHAR(100) NOT NULL
+    apellido VARCHAR(100) NOT NULL,
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de usuarios (relacionada con las dos anteriores)
@@ -19,14 +21,15 @@ CREATE TABLE usuarios (
     contrasenia VARCHAR(255) NOT NULL,
     datos_personales_id INTEGER NOT NULL REFERENCES datos_personales(id),
     rol_id INTEGER NOT NULL REFERENCES roles(id),
-    activo BOOLEAN DEFAULT true
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de tipos de requisitos
 CREATE TABLE tipos_requisito (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
-    descripcion TEXT
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de prioridades
@@ -34,7 +37,8 @@ CREATE TABLE prioridades (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
     nivel INTEGER NOT NULL UNIQUE,
-    descripcion TEXT
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de estados de proyecto
@@ -42,7 +46,8 @@ CREATE TABLE estados_proyecto (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
     descripcion TEXT,
-    orden INTEGER NOT NULL UNIQUE
+    orden INTEGER NOT NULL UNIQUE,
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de estados de elementos (requisitos, casos de uso, historias)
@@ -52,7 +57,8 @@ CREATE TABLE estados_elemento (
     nombre VARCHAR(50) NOT NULL,
     descripcion TEXT,
     tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('requisito', 'caso_uso', 'historia_usuario')),
-    -- Se agrega una restricción única compuesta por nombre y tipo
+    activo BOOLEAN DEFAULT TRUE,
+    -- restricción única compuesta
     UNIQUE(nombre, tipo)
 );
 
@@ -60,16 +66,19 @@ CREATE TABLE estados_elemento (
 CREATE TABLE tipos_relacion_cu (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
-    descripcion TEXT
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de tipos de relación entre requisitos
 CREATE TABLE tipos_relacion_requisito (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
-    descripcion TEXT
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
 );
 
+-- Tabla de proyectos
 CREATE TABLE proyectos (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -183,29 +192,30 @@ CREATE TABLE historias_requisitos (
     UNIQUE(historia_id, requisito_id)
 );
 
+
 -- Insertar algunos roles básicos
 INSERT INTO roles (nombre, descripcion) VALUES 
 ('admin', 'Administrador del sistema'),
 ('usuario', 'Usuario regular');
 
--- Insertar tipos de requisitos
-INSERT INTO tipos_requisito (nombre, descripcion) VALUES 
-('funcional', 'Requisitos que definen funciones específicas del sistema'),
-('no-funcional', 'Requisitos relacionados con calidad, rendimiento, seguridad, etc.'),
-('negocio', 'Requisitos relacionados con objetivos de negocio'),
-('tecnico', 'Requisitos técnicos de implementación'),
-('sistema', 'Requisitos generales del sistema'),
-('interfaz', 'Requisitos de interfaz de usuario');
+-- Insertar tipos de requisitos (con activo)
+INSERT INTO tipos_requisito (nombre, descripcion, activo) VALUES 
+('funcional', 'Requisitos que definen funciones específicas del sistema', TRUE),
+('no-funcional', 'Requisitos relacionados con calidad, rendimiento, seguridad, etc.', TRUE),
+('negocio', 'Requisitos relacionados con objetivos de negocio', TRUE),
+('tecnico', 'Requisitos técnicos de implementación', TRUE),
+('sistema', 'Requisitos generales del sistema', TRUE),
+('interfaz', 'Requisitos de interfaz de usuario', TRUE);
 
--- Insertar prioridades
-INSERT INTO prioridades (nombre, nivel, descripcion) VALUES 
-('muy-alta', 1, 'Prioridad muy alta - Crítico para el proyecto'),
-('alta', 2, 'Prioridad alta - Importante para el proyecto'),
-('media', 3, 'Prioridad media - Necesario pero no urgente'),
-('baja', 4, 'Prioridad baja - Deseable pero no esencial'),
-('muy-baja', 5, 'Prioridad muy baja - Podría considerarse en el futuro');
+-- Insertar prioridades (con activo)
+INSERT INTO prioridades (nombre, nivel, descripcion, activo) VALUES 
+('muy-alta', 1, 'Prioridad muy alta - Crítico para el proyecto', TRUE),
+('alta', 2, 'Prioridad alta - Importante para el proyecto', TRUE),
+('media', 3, 'Prioridad media - Necesario pero no urgente', TRUE),
+('baja', 4, 'Prioridad baja - Deseable pero no esencial', TRUE),
+('muy-baja', 5, 'Prioridad muy baja - Podría considerarse en el futuro', TRUE);
 
--- Insertar estados de proyecto
+-- Insertar estados de proyecto (sin cambios porque no tiene campo activo)
 INSERT INTO estados_proyecto (nombre, descripcion, orden) VALUES 
 ('requisitos', 'Fase de definición de requisitos', 1),
 ('analisis', 'Fase de análisis y diseño', 2),
@@ -215,48 +225,48 @@ INSERT INTO estados_proyecto (nombre, descripcion, orden) VALUES
 ('finalizado', 'Proyecto finalizado', 6),
 ('cancelado', 'Proyecto cancelado', 7);
 
--- Insertar tipos de relación entre casos de uso
+-- Insertar tipos de relación entre casos de uso (sin cambios)
 INSERT INTO tipos_relacion_cu (nombre, descripcion) VALUES 
 ('include', 'El CU incluye obligatoriamente otro CU'),
 ('extend', 'El CU puede extender otro CU bajo condiciones'),
 ('generalizacion', 'El CU es una especialización de otro CU padre'),
 ('dependencia', 'El CU depende de otro CU para su ejecución');
 
--- Insertar tipos de relación entre requisitos
-INSERT INTO tipos_relacion_requisito (nombre, descripcion) VALUES 
-('depende', 'Este requisito depende del requisito relacionado'),
-('bloquea', 'Este requisito bloquea al requisito relacionado'),
-('conflicto', 'Este requisito está en conflicto con el relacionado'),
-('complementa', 'Este requisito complementa al requisito relacionado'),
-('deriva', 'Este requisito deriva del requisito relacionado'),
-('refina', 'Este requisito refina al requisito relacionado');
+-- Insertar tipos de relación entre requisitos (con activo)
+INSERT INTO tipos_relacion_requisito (nombre, descripcion, activo) VALUES 
+('depende', 'Este requisito depende del requisito relacionado', TRUE),
+('bloquea', 'Este requisito bloquea al requisito relacionado', TRUE),
+('conflicto', 'Este requisito está en conflicto con el relacionado', TRUE),
+('complementa', 'Este requisito complementa al requisito relacionado', TRUE),
+('deriva', 'Este requisito deriva del requisito relacionado', TRUE),
+('refina', 'Este requisito refina al requisito relacionado', TRUE);
 
--- Insertar estados para elementos (requisitos, casos de uso, historias)
+-- Insertar estados para elementos (con activo)
 -- Estados para requisitos
-INSERT INTO estados_elemento (nombre, descripcion, tipo) VALUES 
-('pendiente', 'Requisito pendiente de revisión', 'requisito'),
-('aprobado', 'Requisito aprobado para implementación', 'requisito'),
-('en-desarrollo', 'Requisito en desarrollo', 'requisito'),
-('implementado', 'Requisito implementado', 'requisito'),
-('rechazado', 'Requisito rechazado', 'requisito'),
-('postpuesto', 'Requisito postpuesto para una fase posterior', 'requisito');
+INSERT INTO estados_elemento (nombre, descripcion, tipo, activo) VALUES 
+('pendiente', 'Requisito pendiente de revisión', 'requisito', TRUE),
+('aprobado', 'Requisito aprobado para implementación', 'requisito', TRUE),
+('en-desarrollo', 'Requisito en desarrollo', 'requisito', TRUE),
+('implementado', 'Requisito implementado', 'requisito', TRUE),
+('rechazado', 'Requisito rechazado', 'requisito', TRUE),
+('postpuesto', 'Requisito postpuesto para una fase posterior', 'requisito', TRUE);
 
 -- Estados para casos de uso
-INSERT INTO estados_elemento (nombre, descripcion, tipo) VALUES 
-('pendiente', 'Caso de uso pendiente de revisión', 'caso_uso'),
-('aprobado', 'Caso de uso aprobado', 'caso_uso'),
-('en-analisis', 'Caso de uso en análisis', 'caso_uso'),
-('desarrollado', 'Caso de uso desarrollado', 'caso_uso'),
-('probado', 'Caso de uso probado', 'caso_uso'),
-('rechazado', 'Caso de uso rechazado', 'caso_uso');
+INSERT INTO estados_elemento (nombre, descripcion, tipo, activo) VALUES 
+('pendiente', 'Caso de uso pendiente de revisión', 'caso_uso', TRUE),
+('aprobado', 'Caso de uso aprobado', 'caso_uso', TRUE),
+('en-analisis', 'Caso de uso en análisis', 'caso_uso', TRUE),
+('desarrollado', 'Caso de uso desarrollado', 'caso_uso', TRUE),
+('probado', 'Caso de uso probado', 'caso_uso', TRUE),
+('rechazado', 'Caso de uso rechazado', 'caso_uso', TRUE);
 
 -- Estados para historias de usuario
-INSERT INTO estados_elemento (nombre, descripcion, tipo) VALUES 
-('pendiente', 'Historia de usuario pendiente', 'historia_usuario'),
-('en-progreso', 'Historia de usuario en progreso', 'historia_usuario'),
-('completada', 'Historia de usuario completada', 'historia_usuario'),
-('bloqueada', 'Historia de usuario bloqueada', 'historia_usuario'),
-('rechazada', 'Historia de usuario rechazada', 'historia_usuario');
+INSERT INTO estados_elemento (nombre, descripcion, tipo, activo) VALUES 
+('pendiente', 'Historia de usuario pendiente', 'historia_usuario', TRUE),
+('en-progreso', 'Historia de usuario en progreso', 'historia_usuario', TRUE),
+('completada', 'Historia de usuario completada', 'historia_usuario', TRUE),
+('bloqueada', 'Historia de usuario bloqueada', 'historia_usuario', TRUE),
+('rechazada', 'Historia de usuario rechazada', 'historia_usuario', TRUE);
 
 -- Insertar datos personales
 INSERT INTO datos_personales (nombre, apellido)
@@ -283,6 +293,7 @@ VALUES (
     2,
     TRUE
 );
+
 -- Si tienen tablas en postgres y quieren traerlas al backend, pueden usar el siguiente comando:
 -- python manage.py inspectdb > models.py
 
