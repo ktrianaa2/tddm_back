@@ -12,7 +12,4 @@ urlpatterns = [
     
     # Relaciones entre requisitos
     path('relaciones/<int:requisito_id>/', views.obtener_relaciones_requisito, name='obtener_relaciones_requisito'),
-    
-    # Catálogos
-    path('catalogos/', views.obtener_catalogos_requisitos, name='catalogos_requisitos'),
 ]
