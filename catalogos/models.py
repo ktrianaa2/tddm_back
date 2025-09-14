@@ -81,3 +81,15 @@ class TiposRelacionRequisito(models.Model):
 
     def __str__(self):
         return self.nombre
+
+class TiposEstimacion(models.Model):
+    nombre = models.CharField(max_length=50, unique=True)  # story-points, horas, días, costo
+    descripcion = models.TextField(blank=True, null=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tipos_estimacion'
+
+    def __str__(self):
+        return self.nombre

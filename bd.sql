@@ -78,6 +78,26 @@ CREATE TABLE tipos_relacion_requisito (
     activo BOOLEAN DEFAULT TRUE
 );
 
+-- Tabla de tipos de estimación
+CREATE TABLE tipos_estimacion (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,  -- story-points, horas, días, costo
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
+);
+
+-- Tabla relación entre historia de usuario y estimaciones
+CREATE TABLE historias_estimaciones (
+    id SERIAL PRIMARY KEY,
+    historia_id INTEGER NOT NULL REFERENCES historias_usuario(id) ON DELETE CASCADE,
+    tipo_estimacion_id INTEGER NOT NULL REFERENCES tipos_estimacion(id),
+    valor NUMERIC(10,2) NOT NULL, -- puede ser puntos, horas, días o costo en $
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN DEFAULT TRUE,
+    UNIQUE(historia_id, tipo_estimacion_id) -- Evita duplicados para un mismo tipo en una historia
+);
+
 -- Tabla de proyectos
 CREATE TABLE proyectos (
     id SERIAL PRIMARY KEY,
@@ -124,7 +144,6 @@ CREATE TABLE historias_usuario (
     dependencias_relaciones TEXT,
     componentes_relacionados VARCHAR(200),
     notas_adicionales TEXT,
-    estimaciones JSONB,
     proyecto_id INTEGER NOT NULL REFERENCES proyectos(id),
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -267,6 +286,13 @@ INSERT INTO estados_elemento (nombre, descripcion, tipo, activo) VALUES
 ('completada', 'Historia de usuario completada', 'historia_usuario', TRUE),
 ('bloqueada', 'Historia de usuario bloqueada', 'historia_usuario', TRUE),
 ('rechazada', 'Historia de usuario rechazada', 'historia_usuario', TRUE);
+
+-- Insertar los tipos de estimación básicos
+INSERT INTO tipos_estimacion (nombre, descripcion, activo) VALUES
+('story-points', 'Estimación relativa en puntos de historia', TRUE),
+('horas', 'Estimación en horas de esfuerzo', TRUE),
+('dias', 'Estimación en días de esfuerzo', TRUE),
+('costo', 'Estimación en costo monetario', TRUE);
 
 -- Insertar datos personales
 INSERT INTO datos_personales (nombre, apellido)

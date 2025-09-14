@@ -681,3 +681,83 @@ def deshabilitar_tipo_relacion_requisito(request, tr_id):
         return JsonResponse({'mensaje': 'Tipo de relación requisito deshabilitado'}, status=200)
     except TiposRelacionRequisito.DoesNotExist:
         return JsonResponse({'error': 'Tipo de relación requisito no encontrado'}, status=404)
+
+# -----------------------------
+# CRUD para TiposEstimacion
+# -----------------------------
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def crear_tipo_estimacion(request):
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+    try:
+        nombre = request.POST.get('nombre')
+        descripcion = request.POST.get('descripcion', '')
+        if not nombre:
+            return JsonResponse({'error': 'Nombre requerido'}, status=400)
+
+        with transaction.atomic():
+            te = TiposEstimacion.objects.create(nombre=nombre, descripcion=descripcion, activo=True)
+
+        return JsonResponse({
+            'mensaje': 'Tipo de estimación creado',
+            'id': te.id,
+            'nombre': te.nombre
+        }, status=201)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def listar_tipos_estimacion(request):
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+    try:
+        tes = TiposEstimacion.objects.filter(activo=True).order_by('nombre')
+        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion} for t in tes]
+        return JsonResponse({'tipos_estimacion': data}, status=200)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def editar_tipo_estimacion(request, te_id):
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+    try:
+        te = TiposEstimacion.objects.get(id=te_id, activo=True)
+        nombre = request.POST.get('nombre')
+        descripcion = request.POST.get('descripcion')
+
+        with transaction.atomic():
+            if nombre:
+                te.nombre = nombre
+            if descripcion is not None:
+                te.descripcion = descripcion
+            te.save()
+
+        return JsonResponse({'mensaje': 'Tipo de estimación actualizado'}, status=200)
+
+    except TiposEstimacion.DoesNotExist:
+        return JsonResponse({'error': 'Tipo de estimación no encontrado'}, status=404)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def deshabilitar_tipo_estimacion(request, te_id):
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+    try:
+        te = TiposEstimacion.objects.get(id=te_id, activo=True)
+        te.activo = False
+        te.save()
+        return JsonResponse({'mensaje': 'Tipo de estimación deshabilitado'}, status=200)
+    except TiposEstimacion.DoesNotExist:
+        return JsonResponse({'error': 'Tipo de estimación no encontrado'}, status=404)

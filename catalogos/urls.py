@@ -53,3 +53,10 @@ urlpatterns += [
     path('tipos_relacion_requisito/deshabilitar/<int:tr_id>/', views.deshabilitar_tipo_relacion_requisito, name='deshabilitar_tipo_relacion_requisito'),
 ]
 
+# TiposEstimacion
+urlpatterns += [
+    path('tipos_estimacion/listar/', views.listar_tipos_estimacion, name='listar_tipos_estimacion'),
+    path('tipos_estimacion/crear/', views.crear_tipo_estimacion, name='crear_tipo_estimacion'),
+    path('tipos_estimacion/editar/<int:te_id>/', views.editar_tipo_estimacion, name='editar_tipo_estimacion'),
+    path('tipos_estimacion/deshabilitar/<int:te_id>/', views.deshabilitar_tipo_estimacion, name='deshabilitar_tipo_estimacion'),
+]
