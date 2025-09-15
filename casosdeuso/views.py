@@ -3,7 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from casosdeuso.models import CasosUso, RelacionesCasosUso, EstadosElemento, TiposRelacionCu
+from casosdeuso.models import CasosUso, RelacionesCasosUso, EstadosElemento, TiposRelacionCu, Prioridades
 from proyectos.models import Proyectos
 from usuarios.views import validar_token
 import json
@@ -34,6 +34,7 @@ def crear_caso_uso(request):
             actores = ', '.join(actores)
         
         # Campos opcionales según DB
+        prioridad_id = data.get('prioridad_id')
         flujos_alternativos = data.get('flujos_alternativos', [])
         postcondiciones = data.get('postcondiciones', '')
         requisitos_especiales = data.get('requisitos_especiales', '')
@@ -90,6 +91,13 @@ def crear_caso_uso(request):
             except EstadosElemento.DoesNotExist:
                 estado_id = 1
 
+        # Validar prioridad si se proporciona
+        if prioridad_id:
+            try:
+                Prioridades.objects.get(id=prioridad_id)
+            except Prioridades.DoesNotExist:
+                return JsonResponse({'error': 'La prioridad especificada no existe'}, status=400)
+
         with transaction.atomic():
             # Crear el caso de uso según estructura DB
             caso_uso = CasosUso.objects.create(
@@ -103,6 +111,7 @@ def crear_caso_uso(request):
                 requisitos_especiales=requisitos_especiales or '',
                 riesgos_consideraciones=riesgos_consideraciones or '',
                 proyecto_id=proyecto_id,
+                prioridad_id=prioridad_id,  
                 estado_id=estado_id,
                 activo=True
             )
@@ -200,6 +209,7 @@ def obtener_caso_uso(request, caso_uso_id):
             'riesgos_consideraciones': caso_uso.riesgos_consideraciones or '',
             'estado': caso_uso.estado.nombre.lower().replace(' ', '-') if caso_uso.estado else None,
             'proyecto_id': caso_uso.proyecto_id,
+            'prioridad': caso_uso.prioridad.nombre if caso_uso.prioridad else None,
             'fecha_creacion': caso_uso.fecha_creacion.isoformat() if caso_uso.fecha_creacion else None,
             'relaciones': relaciones_data
         }
@@ -263,6 +273,16 @@ def actualizar_caso_uso(request, caso_uso_id):
 
         if 'riesgos_consideraciones' in data:
             caso_uso.riesgos_consideraciones = data['riesgos_consideraciones'] or ''
+
+        if 'prioridad_id' in data:
+            if data['prioridad_id']:
+                try:
+                    Prioridades.objects.get(id=data['prioridad_id'])
+                    caso_uso.prioridad_id = data['prioridad_id']
+                except Prioridades.DoesNotExist:
+                    return JsonResponse({'error': 'La prioridad especificada no existe'}, status=400)
+            else:
+                caso_uso.prioridad_id = None
 
         # Manejar estado_id correctamente
         estado_id = data.get('estado_id') or data.get('estado')
@@ -379,9 +399,9 @@ def listar_casos_uso(request, proyecto_id):
         # Obtener casos de uso del proyecto
         casos_uso = CasosUso.objects.filter(
             proyecto_id=proyecto_id, 
-            activo=True
-        ).select_related('estado').order_by('-fecha_creacion')
-
+         activo=True
+        ).select_related('estado').prefetch_related('prioridad').order_by('-fecha_creacion')
+        
         # Obtener todas las relaciones para incluir el conteo
         relaciones_por_caso = {}
         relaciones = RelacionesCasosUso.objects.filter(
@@ -422,6 +442,7 @@ def listar_casos_uso(request, proyecto_id):
                 'riesgos_consideraciones': cu.riesgos_consideraciones or '',
                 'estado': cu.estado.nombre.lower().replace(' ', '-') if cu.estado else None,
                 'proyecto_id': cu.proyecto_id,
+                'prioridad': cu.prioridad.nombre if cu.prioridad else None,
                 'fecha_creacion': cu.fecha_creacion.isoformat() if cu.fecha_creacion else None,
                 'relaciones': caso_relaciones
             })

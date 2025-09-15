@@ -31,7 +31,19 @@ class TiposRelacionCu(models.Model):
     def __str__(self):
         return self.nombre
 
+class Prioridades(models.Model):
+    nombre = models.CharField(max_length=50, unique=True)
+    nivel = models.IntegerField(unique=True)
+    descripcion = models.TextField(blank=True, null=True)
+    activo = models.BooleanField(default=True)  
 
+    class Meta:
+        managed = False
+        db_table = 'prioridades'
+
+    def __str__(self):
+        return self.nombre
+    
 class CasosUso(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
@@ -43,6 +55,7 @@ class CasosUso(models.Model):
     requisitos_especiales = models.TextField(blank=True, null=True)
     riesgos_consideraciones = models.TextField(blank=True, null=True)
     proyecto = models.ForeignKey(Proyectos, models.DO_NOTHING, db_column='proyecto_id')
+    prioridad = models.ForeignKey(Prioridades, models.DO_NOTHING, db_column='prioridad_id', blank=True, null=True)
     estado = models.ForeignKey(EstadosElemento, models.DO_NOTHING, db_column='estado_id', blank=True, null=True)
     fecha_creacion = models.DateTimeField(default=timezone.now)
     fecha_actualizacion = models.DateTimeField(auto_now=True)

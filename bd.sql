@@ -123,6 +123,7 @@ CREATE TABLE casos_uso (
     requisitos_especiales TEXT,
     riesgos_consideraciones TEXT,
     proyecto_id INTEGER NOT NULL REFERENCES proyectos(id),
+    prioridad_id INTEGER REFERENCES prioridades(id),
     estado_id INTEGER REFERENCES estados_elemento(id),
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
