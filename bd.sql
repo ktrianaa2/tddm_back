@@ -70,6 +70,18 @@ CREATE TABLE tipos_relacion_cu (
     activo BOOLEAN DEFAULT TRUE
 );
 
+-- Tabla de proyectos
+CREATE TABLE proyectos (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    estado VARCHAR(50) DEFAULT 'Requisitos',
+    fecha_creacion DATE DEFAULT CURRENT_DATE,
+    fecha_actualizacion DATE DEFAULT CURRENT_DATE,
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+    activo BOOLEAN DEFAULT TRUE
+);
+
 -- Tabla de tipos de relación entre requisitos
 CREATE TABLE tipos_relacion_requisito (
     id SERIAL PRIMARY KEY,
@@ -117,18 +129,6 @@ CREATE TABLE historias_estimaciones (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     activo BOOLEAN DEFAULT TRUE,
     UNIQUE(historia_id, tipo_estimacion_id) -- Evita duplicados para un mismo tipo en una historia
-);
-
--- Tabla de proyectos
-CREATE TABLE proyectos (
-    id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    descripcion TEXT,
-    estado VARCHAR(50) DEFAULT 'Requisitos',
-    fecha_creacion DATE DEFAULT CURRENT_DATE,
-    fecha_actualizacion DATE DEFAULT CURRENT_DATE,
-    usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
-    activo BOOLEAN DEFAULT TRUE
 );
 
 -- Tabla de casos de uso
@@ -217,11 +217,11 @@ CREATE TABLE historias_requisitos (
 CREATE TABLE pruebas (
     id SERIAL PRIMARY KEY,
     id_proyecto INT NOT NULL,
-    tipo_prueba ENUM('unitaria', 'sistema', 'componente') NOT NULL,
+    tipo_prueba TEXT,
     codigo VARCHAR(50) NOT NULL,
     nombre VARCHAR(255) NOT NULL,
     descripcion TEXT,
-    estado ENUM('borrador', 'aprobada', 'pendiente') DEFAULT 'borrador',
+    estado TEXT,
     especificacion_relacionada VARCHAR(100),
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     prueba JSON NOT NULL,  -- Almacena el objeto completo con pasos, criterios, etc.
