@@ -212,6 +212,19 @@ CREATE TABLE historias_requisitos (
     UNIQUE(historia_id, requisito_id)
 );
 
+CREATE TABLE pruebas (
+    id_prueba INT PRIMARY KEY AUTO_INCREMENT,
+    id_proyecto INT NOT NULL,
+    tipo_prueba ENUM('unitaria', 'sistema', 'componente') NOT NULL,
+    codigo VARCHAR(50) NOT NULL,
+    nombre VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    estado ENUM('borrador', 'aprobada', 'pendiente') DEFAULT 'borrador',
+    especificacion_relacionada VARCHAR(100),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    prueba JSON NOT NULL,  -- Almacena el objeto completo con pasos, criterios, etc.
+    FOREIGN KEY (id_proyecto) REFERENCES proyectos(proyecto_id)
+);
 
 -- Insertar algunos roles básicos
 INSERT INTO roles (nombre, descripcion) VALUES 
