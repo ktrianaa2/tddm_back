@@ -30,7 +30,12 @@ SECRET_KEY = 'django-insecure-5w1%98(*^l4ahh#i0w^tla1x)x0s0!cvbp=2d#5rjru71uq6ke
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0'
+]
 
 
 # Application definition
@@ -67,6 +72,7 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Tu frontend
     "http://127.0.0.1:5173",
+    "https://tddmachine.web.app",
 ]
 
 # O si quieres permitir todos los orígenes en desarrollo (NO recomendado para producción)
@@ -111,13 +117,20 @@ WSGI_APPLICATION = 'app.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'db_tddmachine',
-        'USER': 'postgres',
-        'PASSWORD': '12345',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'postgres'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
+        'HOST': os.environ.get('DB_HOST'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'OPTIONS': {
+            'sslmode': 'require',          # Supabase requiere SSL
+            'connect_timeout': 60,
+        },
+        'CONN_MAX_AGE': 0,                # El pooler de Supabase usa PgBouncer → debe ser 0
+        'ATOMIC_REQUESTS': True,
     }
 }
+
 
 # Configuración de Django REST Framework
 REST_FRAMEWORK = {
