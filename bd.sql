@@ -86,6 +86,27 @@ CREATE TABLE tipos_estimacion (
     activo BOOLEAN DEFAULT TRUE
 );
 
+-- Tabla de historias de usuario
+CREATE TABLE historias_usuario (
+    id SERIAL PRIMARY KEY,
+    titulo VARCHAR(200) NOT NULL,
+    descripcion TEXT,
+    actor_rol VARCHAR(100),
+    funcionalidad_accion VARCHAR(200),
+    beneficio_razon VARCHAR(200),
+    criterios_aceptacion TEXT NOT NULL,
+    prioridad_id INTEGER REFERENCES prioridades(id),
+    estado_id INTEGER REFERENCES estados_elemento(id),
+    valor_negocio INTEGER CHECK (valor_negocio >= 1 AND valor_negocio <= 100),
+    dependencias_relaciones TEXT,
+    componentes_relacionados VARCHAR(200),
+    notas_adicionales TEXT,
+    proyecto_id INTEGER NOT NULL REFERENCES proyectos(id),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN DEFAULT TRUE
+);
+
 -- Tabla relación entre historia de usuario y estimaciones
 CREATE TABLE historias_estimaciones (
     id SERIAL PRIMARY KEY,
@@ -130,26 +151,7 @@ CREATE TABLE casos_uso (
     activo BOOLEAN DEFAULT TRUE
 );
 
--- Tabla de historias de usuario
-CREATE TABLE historias_usuario (
-    id SERIAL PRIMARY KEY,
-    titulo VARCHAR(200) NOT NULL,
-    descripcion TEXT,
-    actor_rol VARCHAR(100),
-    funcionalidad_accion VARCHAR(200),
-    beneficio_razon VARCHAR(200),
-    criterios_aceptacion TEXT NOT NULL,
-    prioridad_id INTEGER REFERENCES prioridades(id),
-    estado_id INTEGER REFERENCES estados_elemento(id),
-    valor_negocio INTEGER CHECK (valor_negocio >= 1 AND valor_negocio <= 100),
-    dependencias_relaciones TEXT,
-    componentes_relacionados VARCHAR(200),
-    notas_adicionales TEXT,
-    proyecto_id INTEGER NOT NULL REFERENCES proyectos(id),
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    activo BOOLEAN DEFAULT TRUE
-);
+
 
 -- Tabla de requisitos
 CREATE TABLE requisitos (
@@ -213,7 +215,7 @@ CREATE TABLE historias_requisitos (
 );
 
 CREATE TABLE pruebas (
-    id_prueba INT PRIMARY KEY AUTO_INCREMENT,
+    id SERIAL PRIMARY KEY,
     id_proyecto INT NOT NULL,
     tipo_prueba ENUM('unitaria', 'sistema', 'componente') NOT NULL,
     codigo VARCHAR(50) NOT NULL,
