@@ -214,19 +214,34 @@ CREATE TABLE historias_requisitos (
     UNIQUE(historia_id, requisito_id)
 );
 
+-- Tabla de tipos de pruebas
+CREATE TABLE tipos_prueba (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,
+    descripcion TEXT,              
+    activo BOOLEAN DEFAULT TRUE
+);
+
+-- Tabla de pruebas
 CREATE TABLE pruebas (
     id SERIAL PRIMARY KEY,
-    id_proyecto INT NOT NULL,
-    tipo_prueba TEXT,
-    codigo VARCHAR(50) NOT NULL,
-    nombre VARCHAR(255) NOT NULL,
-    descripcion TEXT,
-    estado TEXT,
-    especificacion_relacionada VARCHAR(100),
+    proyecto_id INTEGER NOT NULL REFERENCES proyectos(id),
+    tipo_prueba_id INTEGER NOT NULL REFERENCES tipos_prueba(id),
+    codigo VARCHAR(50) NOT NULL,    
+    nombre VARCHAR(255) NOT NULL,          
+    descripcion TEXT,                      
+    estado VARCHAR(50),        
+    especificacion_relacionada VARCHAR(100), 
+    prueba JSON NOT NULL,           
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    prueba JSON NOT NULL,  -- Almacena el objeto completo con pasos, criterios, etc.
-    FOREIGN KEY (id_proyecto) REFERENCES proyectos(proyecto_id)
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN DEFAULT TRUE
 );
+
+INSERT INTO tipos_prueba (nombre, descripcion, activo) VALUES
+('integracion', 'Pruebas que verifican la integración entre módulos', TRUE),
+('sistema', 'Pruebas completas del sistema en su totalidad', TRUE),
+('unitaria', 'Pruebas individuales de funciones o métodos', TRUE);
 
 -- Insertar algunos roles básicos
 INSERT INTO roles (nombre, descripcion) VALUES 

@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'casosdeuso',
     'historiasdeusuario',
     'catalogos',
+    'pruebas',
 ]
 
 MIDDLEWARE = [
@@ -115,20 +116,31 @@ WSGI_APPLICATION = 'app.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.environ.get('DB_NAME', 'postgres'),
+#         'USER': os.environ.get('DB_USER'),
+#         'PASSWORD': os.environ.get('DB_PASSWORD'),
+#         'HOST': os.environ.get('DB_HOST'),
+#         'PORT': os.environ.get('DB_PORT', '5432'),
+#         'OPTIONS': {
+#             'sslmode': 'require',          # Supabase requiere SSL
+#             'connect_timeout': 60,
+#         },
+#         'CONN_MAX_AGE': 0,                # El pooler de Supabase usa PgBouncer → debe ser 0
+#         'ATOMIC_REQUESTS': True,
+#     }
+# }
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'postgres'),
-        'USER': os.environ.get('DB_USER'),
-        'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-        'OPTIONS': {
-            'sslmode': 'require',          # Supabase requiere SSL
-            'connect_timeout': 60,
-        },
-        'CONN_MAX_AGE': 0,                # El pooler de Supabase usa PgBouncer → debe ser 0
-        'ATOMIC_REQUESTS': True,
+        'NAME': 'db_tddmachine',
+        'USER': 'postgres',
+        'PASSWORD': '12345',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
