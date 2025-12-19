@@ -5,6 +5,7 @@ from django.utils import timezone
 class TiposRequisito(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -19,6 +20,7 @@ class Prioridades(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     nivel = models.IntegerField(unique=True)
     descripcion = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -33,6 +35,7 @@ class EstadosProyecto(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
     orden = models.IntegerField(unique=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -46,6 +49,7 @@ class EstadosElemento(models.Model):
     nombre = models.CharField(max_length=50)
     descripcion = models.TextField(blank=True, null=True)
     tipo = models.CharField(max_length=20)  # 'requisito', 'caso_uso', 'historia_usuario'
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -60,6 +64,7 @@ class EstadosElemento(models.Model):
 class TiposRelacionCu(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -73,6 +78,7 @@ class TiposRelacionCu(models.Model):
 class TiposRelacionRequisito(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -85,6 +91,7 @@ class TiposRelacionRequisito(models.Model):
 class TiposEstimacion(models.Model):
     nombre = models.CharField(max_length=50, unique=True)  # story-points, horas, días, costo
     descripcion = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:

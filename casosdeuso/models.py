@@ -1,49 +1,9 @@
 # casosdeuso/models.py
 from django.db import models
 from proyectos.models import Proyectos
+from catalogos.models import EstadosElemento, TiposRelacionCu, Prioridades
 from django.utils import timezone
 
-
-class EstadosElemento(models.Model):
-    nombre = models.CharField(max_length=50)
-    descripcion = models.TextField(blank=True, null=True)
-    tipo = models.CharField(max_length=20)
-    activo = models.BooleanField(default=True)
-
-    class Meta:
-        managed = False
-        db_table = 'estados_elemento'
-        unique_together = (('nombre', 'tipo'),)
-
-    def __str__(self):
-        return f"{self.nombre} ({self.tipo})"
-
-
-class TiposRelacionCu(models.Model):
-    nombre = models.CharField(max_length=50, unique=True)
-    descripcion = models.TextField(blank=True, null=True)
-    activo = models.BooleanField(default=True)
-
-    class Meta:
-        managed = False
-        db_table = 'tipos_relacion_cu'
-
-    def __str__(self):
-        return self.nombre
-
-class Prioridades(models.Model):
-    nombre = models.CharField(max_length=50, unique=True)
-    nivel = models.IntegerField(unique=True)
-    descripcion = models.TextField(blank=True, null=True)
-    activo = models.BooleanField(default=True)  
-
-    class Meta:
-        managed = False
-        db_table = 'prioridades'
-
-    def __str__(self):
-        return self.nombre
-    
 class CasosUso(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)

@@ -4,7 +4,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from requisitos.models import Requisitos, RelacionesRequisitos, TiposRequisito, Prioridades, EstadosElemento, TiposRelacionRequisito
+from requisitos.models import Requisitos, RelacionesRequisitos
+from catalogos.models import TiposRequisito, Prioridades, EstadosElemento, TiposRelacionRequisito
 from proyectos.models import Proyectos
 from usuarios.models import Usuarios
 from usuarios.views import validar_token
@@ -149,6 +150,8 @@ def obtener_requisito(request, requisito_id):
                 'id': rel.id,
                 'requisito_id': rel.requisito_destino.id,
                 'tipo_relacion': str(rel.tipo_relacion.id),
+                'tipo_relacion_nombre': rel.tipo_relacion.nombre,
+                'tipo_relacion_color': rel.tipo_relacion.color,
                 'descripcion': rel.descripcion or ''
             })
 
@@ -157,9 +160,12 @@ def obtener_requisito(request, requisito_id):
             'nombre': requisito.nombre,
             'descripcion': requisito.descripcion,
             'tipo': safe_key_conversion(requisito.tipo.nombre) if requisito.tipo else None,
+            'tipo_color': requisito.tipo.color if requisito.tipo else None,
             'criterios': requisito.criterios,
             'prioridad': safe_key_conversion(requisito.prioridad.nombre) if requisito.prioridad else None,
+            'prioridad_color': requisito.prioridad.color if requisito.prioridad else None,
             'estado': safe_key_conversion(requisito.estado.nombre) if requisito.estado else None,
+            'estado_color': requisito.estado.color if requisito.estado else None,
             'origen': requisito.origen,
             'condiciones_previas': requisito.condiciones_previas,
             'proyecto_id': requisito.proyecto_id,
@@ -356,9 +362,12 @@ def listar_requisitos(request, proyecto_id):
                 'nombre': r.nombre,
                 'descripcion': r.descripcion,
                 'tipo': safe_key_conversion(r.tipo.nombre) if r.tipo else None,
+                'tipo_color': r.tipo.color if r.tipo else None,
                 'criterios': r.criterios,
                 'prioridad': safe_key_conversion(r.prioridad.nombre) if r.prioridad else None,
+                'prioridad_color': r.prioridad.color if r.prioridad else None,
                 'estado': safe_key_conversion(r.estado.nombre) if r.estado else None,
+                'estado_color': r.estado.color if r.estado else None,
                 'origen': r.origen,
                 'condiciones_previas': r.condiciones_previas,
                 'proyecto_id': r.proyecto_id,
@@ -395,6 +404,8 @@ def obtener_relaciones_requisito(request, requisito_id):
                 'id': rel.id,
                 'requisito_id': rel.requisito_destino.id,
                 'tipo_relacion': str(rel.tipo_relacion.id),
+                'tipo_relacion_nombre': rel.tipo_relacion.nombre,
+                'tipo_relacion_color': rel.tipo_relacion.color,
                 'descripcion': rel.descripcion or ''
             })
 

@@ -20,6 +20,7 @@ def crear_tipo_requisito(request):
     try:
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
 
         if not nombre:
             return JsonResponse({'error': 'El campo nombre es requerido'}, status=400)
@@ -30,6 +31,7 @@ def crear_tipo_requisito(request):
             tipo = TiposRequisito.objects.create(
                 nombre=nombre,
                 descripcion=descripcion,
+                color=color,
                 activo=True
             )
 
@@ -38,6 +40,7 @@ def crear_tipo_requisito(request):
             'tipo_id': tipo.id,
             'nombre': tipo.nombre,
             'descripcion': tipo.descripcion,
+            'color': tipo.color,
         }, status=201)
 
     except Exception as e:
@@ -62,6 +65,7 @@ def listar_tipos_requisito(request):
                 'tipo_id': t.id,
                 'nombre': t.nombre,
                 'descripcion': t.descripcion,
+                'color': t.color,
             })
 
         return JsonResponse({'tipos_requisito': tipos_data}, status=200)
@@ -85,6 +89,7 @@ def obtener_tipo_requisito(request, tipo_id):
             'tipo_id': tipo.id,
             'nombre': tipo.nombre,
             'descripcion': tipo.descripcion,
+            'color': tipo.color,
         }, status=200)
 
     except TiposRequisito.DoesNotExist:
@@ -105,12 +110,15 @@ def editar_tipo_requisito(request, tipo_id):
         tipo = TiposRequisito.objects.get(id=tipo_id, activo=True)
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
 
         with transaction.atomic():
             if nombre:
                 tipo.nombre = nombre
             if descripcion is not None:
                 tipo.descripcion = descripcion
+            if color:
+                tipo.color = color
             tipo.save()
 
         return JsonResponse({'mensaje': 'Tipo de requisito actualizado exitosamente'}, status=200)
@@ -156,6 +164,7 @@ def crear_prioridad(request):
         nombre = request.POST.get('nombre')
         nivel = request.POST.get('nivel')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
 
         if not nombre or not nivel:
             return JsonResponse({'error': 'Los campos nombre y nivel son requeridos'}, status=400)
@@ -167,6 +176,7 @@ def crear_prioridad(request):
                 nombre=nombre,
                 nivel=nivel,
                 descripcion=descripcion,
+                color=color,
                 activo=True
             )
 
@@ -176,6 +186,7 @@ def crear_prioridad(request):
             'nombre': prioridad.nombre,
             'nivel': prioridad.nivel,
             'descripcion': prioridad.descripcion,
+            'color': prioridad.color,
         }, status=201)
 
     except Exception as e:
@@ -201,6 +212,7 @@ def listar_prioridades(request):
                 'nombre': p.nombre,
                 'nivel': p.nivel,
                 'descripcion': p.descripcion,
+                'color': p.color,
             })
 
         return JsonResponse({'prioridades': prioridades_data}, status=200)
@@ -225,6 +237,7 @@ def obtener_prioridad(request, prioridad_id):
             'nombre': prioridad.nombre,
             'nivel': prioridad.nivel,
             'descripcion': prioridad.descripcion,
+            'color': prioridad.color,
         }, status=200)
 
     except Prioridades.DoesNotExist:
@@ -246,6 +259,7 @@ def editar_prioridad(request, prioridad_id):
         nombre = request.POST.get('nombre')
         nivel = request.POST.get('nivel')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
 
         with transaction.atomic():
             if nombre:
@@ -254,6 +268,8 @@ def editar_prioridad(request, prioridad_id):
                 prioridad.nivel = int(nivel)
             if descripcion is not None:
                 prioridad.descripcion = descripcion
+            if color:
+                prioridad.color = color
             prioridad.save()
 
         return JsonResponse({'mensaje': 'Prioridad actualizada exitosamente'}, status=200)
@@ -299,6 +315,7 @@ def crear_estado_proyecto(request):
         nombre = request.POST.get('nombre')
         orden = request.POST.get('orden')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
 
         if not nombre or not orden:
             return JsonResponse({'error': 'Los campos nombre y orden son requeridos'}, status=400)
@@ -310,6 +327,7 @@ def crear_estado_proyecto(request):
                 nombre=nombre,
                 orden=orden,
                 descripcion=descripcion,
+                color=color,
                 activo=True
             )
 
@@ -319,6 +337,7 @@ def crear_estado_proyecto(request):
             'nombre': estado.nombre,
             'orden': estado.orden,
             'descripcion': estado.descripcion,
+            'color': estado.color,
         }, status=201)
 
     except Exception as e:
@@ -344,6 +363,7 @@ def listar_estados_proyecto(request):
                 'nombre': e.nombre,
                 'orden': e.orden,
                 'descripcion': e.descripcion,
+                'color': e.color,
             })
 
         return JsonResponse({'estados_proyecto': estados_data}, status=200)
@@ -368,6 +388,7 @@ def obtener_estado_proyecto(request, estado_id):
             'nombre': estado.nombre,
             'orden': estado.orden,
             'descripcion': estado.descripcion,
+            'color': estado.color,
         }, status=200)
 
     except EstadosProyecto.DoesNotExist:
@@ -389,6 +410,7 @@ def editar_estado_proyecto(request, estado_id):
         nombre = request.POST.get('nombre')
         orden = request.POST.get('orden')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
 
         with transaction.atomic():
             if nombre:
@@ -397,6 +419,8 @@ def editar_estado_proyecto(request, estado_id):
                 estado.orden = int(orden)
             if descripcion is not None:
                 estado.descripcion = descripcion
+            if color:
+                estado.color = color
             estado.save()
 
         return JsonResponse({'mensaje': 'Estado de proyecto actualizado exitosamente'}, status=200)
@@ -444,6 +468,7 @@ def crear_estado_elemento(request):
         nombre = request.POST.get('nombre')
         tipo = request.POST.get('tipo')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
 
         if not nombre or not tipo:
             return JsonResponse({'error': 'Los campos nombre y tipo son requeridos'}, status=400)
@@ -455,6 +480,7 @@ def crear_estado_elemento(request):
                 nombre=nombre,
                 tipo=tipo,
                 descripcion=descripcion,
+                color=color,
                 activo=True
             )
 
@@ -463,7 +489,8 @@ def crear_estado_elemento(request):
             'id': estado.id,
             'nombre': estado.nombre,
             'tipo': estado.tipo,
-            'descripcion': estado.descripcion
+            'descripcion': estado.descripcion,
+            'color': estado.color
         }, status=201)
 
     except Exception as e:
@@ -478,7 +505,7 @@ def listar_estados_elemento(request):
 
     try:
         estados = EstadosElemento.objects.filter(activo=True).order_by('tipo', 'nombre')
-        data = [{'id': e.id, 'nombre': e.nombre, 'tipo': e.tipo, 'descripcion': e.descripcion} for e in estados]
+        data = [{'id': e.id, 'nombre': e.nombre, 'tipo': e.tipo, 'descripcion': e.descripcion, 'color': e.color} for e in estados]
         return JsonResponse({'estados_elemento': data}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -491,7 +518,7 @@ def obtener_estado_elemento(request, estado_id):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
     try:
         e = EstadosElemento.objects.get(id=estado_id, activo=True)
-        return JsonResponse({'id': e.id, 'nombre': e.nombre, 'tipo': e.tipo, 'descripcion': e.descripcion}, status=200)
+        return JsonResponse({'id': e.id, 'nombre': e.nombre, 'tipo': e.tipo, 'descripcion': e.descripcion, 'color': e.color}, status=200)
     except EstadosElemento.DoesNotExist:
         return JsonResponse({'error': 'Estado de elemento no encontrado'}, status=404)
 
@@ -507,6 +534,7 @@ def editar_estado_elemento(request, estado_id):
         nombre = request.POST.get('nombre')
         tipo = request.POST.get('tipo')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
 
         with transaction.atomic():
             if nombre:
@@ -515,6 +543,8 @@ def editar_estado_elemento(request, estado_id):
                 e.tipo = tipo
             if descripcion is not None:
                 e.descripcion = descripcion
+            if color:
+                e.color = color
             e.save()
         return JsonResponse({'mensaje': 'Estado de elemento actualizado exitosamente'}, status=200)
     except EstadosElemento.DoesNotExist:
@@ -552,14 +582,15 @@ def crear_tipo_relacion_cu(request):
     try:
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
 
         if not nombre:
             return JsonResponse({'error': 'Nombre requerido'}, status=400)
 
         with transaction.atomic():
-            tr = TiposRelacionCu.objects.create(nombre=nombre, descripcion=descripcion, activo=True)
+            tr = TiposRelacionCu.objects.create(nombre=nombre, descripcion=descripcion, color=color, activo=True)
 
-        return JsonResponse({'mensaje': 'Tipo de relación CU creado', 'id': tr.id, 'nombre': tr.nombre}, status=201)
+        return JsonResponse({'mensaje': 'Tipo de relación CU creado', 'id': tr.id, 'nombre': tr.nombre, 'color': tr.color}, status=201)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -571,7 +602,7 @@ def listar_tipos_relacion_cu(request):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
     try:
         trs = TiposRelacionCu.objects.filter(activo=True).order_by('nombre')
-        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion} for t in trs]
+        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion, 'color': t.color} for t in trs]
         return JsonResponse({'tipos_relacion_cu': data}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -587,11 +618,14 @@ def editar_tipo_relacion_cu(request, tr_id):
         tr = TiposRelacionCu.objects.get(id=tr_id, activo=True)
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
         with transaction.atomic():
             if nombre:
                 tr.nombre = nombre
             if descripcion is not None:
                 tr.descripcion = descripcion
+            if color:
+                tr.color = color
             tr.save()
         return JsonResponse({'mensaje': 'Tipo de relación CU actualizado'}, status=200)
     except TiposRelacionCu.DoesNotExist:
@@ -625,11 +659,12 @@ def crear_tipo_relacion_requisito(request):
     try:
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
         if not nombre:
             return JsonResponse({'error': 'Nombre requerido'}, status=400)
         with transaction.atomic():
-            tr = TiposRelacionRequisito.objects.create(nombre=nombre, descripcion=descripcion, activo=True)
-        return JsonResponse({'mensaje': 'Tipo de relación requisito creado', 'id': tr.id, 'nombre': tr.nombre}, status=201)
+            tr = TiposRelacionRequisito.objects.create(nombre=nombre, descripcion=descripcion, color=color, activo=True)
+        return JsonResponse({'mensaje': 'Tipo de relación requisito creado', 'id': tr.id, 'nombre': tr.nombre, 'color': tr.color}, status=201)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -641,7 +676,7 @@ def listar_tipos_relacion_requisito(request):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
     try:
         trs = TiposRelacionRequisito.objects.filter(activo=True).order_by('nombre')
-        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion} for t in trs]
+        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion, 'color': t.color} for t in trs]
         return JsonResponse({'tipos_relacion_requisito': data}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -657,11 +692,14 @@ def editar_tipo_relacion_requisito(request, tr_id):
         tr = TiposRelacionRequisito.objects.get(id=tr_id, activo=True)
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
         with transaction.atomic():
             if nombre:
                 tr.nombre = nombre
             if descripcion is not None:
                 tr.descripcion = descripcion
+            if color:
+                tr.color = color
             tr.save()
         return JsonResponse({'mensaje': 'Tipo de relación requisito actualizado'}, status=200)
     except TiposRelacionRequisito.DoesNotExist:
@@ -695,16 +733,18 @@ def crear_tipo_estimacion(request):
     try:
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
         if not nombre:
             return JsonResponse({'error': 'Nombre requerido'}, status=400)
 
         with transaction.atomic():
-            te = TiposEstimacion.objects.create(nombre=nombre, descripcion=descripcion, activo=True)
+            te = TiposEstimacion.objects.create(nombre=nombre, descripcion=descripcion, color=color, activo=True)
 
         return JsonResponse({
             'mensaje': 'Tipo de estimación creado',
             'id': te.id,
-            'nombre': te.nombre
+            'nombre': te.nombre,
+            'color': te.color
         }, status=201)
 
     except Exception as e:
@@ -718,11 +758,10 @@ def listar_tipos_estimacion(request):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
     try:
         tes = TiposEstimacion.objects.filter(activo=True).order_by('nombre')
-        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion} for t in tes]
+        data = [{'id': t.id, 'nombre': t.nombre, 'descripcion': t.descripcion, 'color': t.color} for t in tes]
         return JsonResponse({'tipos_estimacion': data}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -730,23 +769,34 @@ def editar_tipo_estimacion(request, te_id):
     payload = validar_token(request)
     if not payload or 'error' in payload:
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+
     try:
         te = TiposEstimacion.objects.get(id=te_id, activo=True)
+
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
 
         with transaction.atomic():
             if nombre:
                 te.nombre = nombre
             if descripcion is not None:
                 te.descripcion = descripcion
+            if color:
+                te.color = color
+
             te.save()
 
-        return JsonResponse({'mensaje': 'Tipo de estimación actualizado'}, status=200)
+        return JsonResponse(
+            {'mensaje': 'Tipo de estimación actualizado'},
+            status=200
+        )
 
     except TiposEstimacion.DoesNotExist:
-        return JsonResponse({'error': 'Tipo de estimación no encontrado'}, status=404)
-
+        return JsonResponse(
+            {'error': 'Tipo de estimación no encontrado'},
+            status=404
+        )
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -754,10 +804,19 @@ def deshabilitar_tipo_estimacion(request, te_id):
     payload = validar_token(request)
     if not payload or 'error' in payload:
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+
     try:
         te = TiposEstimacion.objects.get(id=te_id, activo=True)
         te.activo = False
         te.save()
-        return JsonResponse({'mensaje': 'Tipo de estimación deshabilitado'}, status=200)
+
+        return JsonResponse(
+            {'mensaje': 'Tipo de estimación deshabilitado'},
+            status=200
+        )
+
     except TiposEstimacion.DoesNotExist:
-        return JsonResponse({'error': 'Tipo de estimación no encontrado'}, status=404)
+        return JsonResponse(
+            {'error': 'Tipo de estimación no encontrado'},
+            status=404
+        )

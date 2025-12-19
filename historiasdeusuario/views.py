@@ -4,17 +4,19 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from historiasdeusuario.models import (
-    HistoriasUsuario, 
-    EstadosElemento, 
-    Prioridades, 
-    TiposEstimacion, 
-    HistoriasEstimaciones
-)
+from historiasdeusuario.models import HistoriasUsuario, HistoriasEstimaciones
+from catalogos.models import EstadosElemento, Prioridades, TiposEstimacion
 from proyectos.models import Proyectos
 from usuarios.views import validar_token
 import json
 from decimal import Decimal, InvalidOperation
+
+# Función auxiliar para convertir valores a format key
+def safe_key_conversion(value):
+    """Convierte un valor a formato de key (lowercase con guiones)"""
+    if not value:
+        return None
+    return value.lower().replace(' ', '-').replace('ó', 'o').replace('í', 'i')
 
 # -----------------------------
 # Crear historia de usuario
@@ -133,6 +135,7 @@ def crear_historia_usuario(request):
                                 'id': estimacion_obj.id,
                                 'tipo_estimacion_id': tipo_estimacion.id,
                                 'tipo_estimacion_nombre': tipo_estimacion.nombre,
+                                'tipo_estimacion_color': tipo_estimacion.color,
                                 'valor': float(valor_decimal)
                             })
                             
@@ -176,11 +179,6 @@ def obtener_historia_usuario(request, historia_id):
         # Obtener la historia de usuario
         historia = get_object_or_404(HistoriasUsuario, id=historia_id, activo=True)
 
-        def safe_key_conversion(value):
-            if not value:
-                return None
-            return value.lower().replace(' ', '-').replace('ó', 'o').replace('í', 'i')
-
         # CORRECCIÓN: Obtener estimaciones con información completa
         estimaciones = HistoriasEstimaciones.objects.filter(
             historia=historia,
@@ -193,6 +191,7 @@ def obtener_historia_usuario(request, historia_id):
                 'id': est.id,
                 'tipo_estimacion_id': est.tipo_estimacion.id,
                 'tipo_estimacion_nombre': est.tipo_estimacion.nombre,
+                'tipo_estimacion_color': est.tipo_estimacion.color,
                 'valor': float(est.valor)
             })
 
@@ -205,7 +204,9 @@ def obtener_historia_usuario(request, historia_id):
             'beneficio_razon': historia.beneficio_razon,
             'criterios_aceptacion': historia.criterios_aceptacion,
             'prioridad': safe_key_conversion(historia.prioridad.nombre) if historia.prioridad else None,
+            'prioridad_color': historia.prioridad.color if historia.prioridad else None,
             'estado': safe_key_conversion(historia.estado.nombre) if historia.estado else None,
+            'estado_color': historia.estado.color if historia.estado else None,
             'valor_negocio': historia.valor_negocio,
             'dependencias_relaciones': historia.dependencias_relaciones,
             'componentes_relacionados': historia.componentes_relacionados,
@@ -417,11 +418,20 @@ def eliminar_historia_usuario(request, historia_id):
     except Exception as e:
         return JsonResponse({'error': f'Error interno del servidor: {str(e)}'}, status=500)
 
-# -----------------------------
-# Listar historias de usuario de un proyecto
-# -----------------------------
+# ============================================================================
+# FUNCIÓN CORREGIDA - Listar historias de usuario de un proyecto
+# ============================================================================
 @require_http_methods(["GET"])
 def listar_historias_usuario(request, proyecto_id):
+    """
+    Lista todas las historias de usuario de un proyecto.
+    
+    CAMBIOS PRINCIPALES:
+    1. safe_key_conversion está definida FUERA del loop
+    2. Manejo robusto de errores con try-except para cada historia
+    3. Retorna lista vacía [] en lugar de error cuando no hay historias
+    4. El proyecto debe existir, pero no es obligatorio que haya historias
+    """
     payload = validar_token(request)
     if not payload or 'error' in payload:
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
@@ -440,54 +450,70 @@ def listar_historias_usuario(request, proyecto_id):
         ).select_related('prioridad', 'estado').order_by('-fecha_creacion')
 
         data = []
+        
+        # Procesar cada historia
         for h in historias:
-            def safe_key_conversion(value):
-                if not value:
-                    return None
-                return value.lower().replace(' ', '-').replace('ó', 'o').replace('í', 'i')
+            try:
+                # Obtener estimaciones para la historia
+                estimaciones = HistoriasEstimaciones.objects.filter(
+                    historia=h,
+                    activo=True
+                ).select_related('tipo_estimacion')
 
-            # CORRECCIÓN: Obtener estimaciones para la lista
-            estimaciones = HistoriasEstimaciones.objects.filter(
-                historia=h,
-                activo=True
-            ).select_related('tipo_estimacion')
+                estimaciones_data = []
+                for est in estimaciones:
+                    try:
+                        estimaciones_data.append({
+                            'id': est.id,
+                            'tipo_estimacion_id': est.tipo_estimacion.id,
+                            'tipo_estimacion_nombre': est.tipo_estimacion.nombre,
+                            'tipo_estimacion_color': est.tipo_estimacion.color,
+                            'valor': float(est.valor)
+                        })
+                    except Exception as e:
+                        print(f"Error procesando estimación {est.id}: {str(e)}")
+                        continue
 
-            estimaciones_data = []
-            for est in estimaciones:
-                estimaciones_data.append({
-                    'id': est.id,
-                    'tipo_estimacion_id': est.tipo_estimacion.id,
-                    'tipo_estimacion_nombre': est.tipo_estimacion.nombre,
-                    'valor': float(est.valor)
-                })
+                # Construir datos de la historia
+                historia_data = {
+                    'id': h.id,
+                    'titulo': h.titulo,
+                    'descripcion': h.descripcion or '',
+                    'actor_rol': h.actor_rol or '',
+                    'funcionalidad_accion': h.funcionalidad_accion or '',
+                    'beneficio_razon': h.beneficio_razon or '',
+                    'criterios_aceptacion': h.criterios_aceptacion,
+                    'prioridad': safe_key_conversion(h.prioridad.nombre) if h.prioridad else None,
+                    'prioridad_color': h.prioridad.color if h.prioridad else None,
+                    'estado': safe_key_conversion(h.estado.nombre) if h.estado else None,
+                    'estado_color': h.estado.color if h.estado else None,
+                    'valor_negocio': h.valor_negocio,
+                    'dependencias_relaciones': h.dependencias_relaciones or '',
+                    'componentes_relacionados': h.componentes_relacionados or '',
+                    'notas_adicionales': h.notas_adicionales or '',
+                    'proyecto_id': h.proyecto_id,
+                    'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
+                    'estimaciones': estimaciones_data,
+                    # MANTENER COMPATIBILIDAD: Para historias con una sola estimación
+                    'estimacion_valor': estimaciones_data[0]['valor'] if len(estimaciones_data) == 1 else None,
+                    'unidad_estimacion': estimaciones_data[0]['tipo_estimacion_nombre'] if len(estimaciones_data) == 1 else None
+                }
+                
+                data.append(historia_data)
+                
+            except Exception as e:
+                print(f"Error procesando historia {h.id}: {str(e)}")
+                # Continuar con la siguiente historia en lugar de fallar completamente
+                continue
 
-            historia_data = {
-                'id': h.id,
-                'titulo': h.titulo,
-                'descripcion': h.descripcion,
-                'actor_rol': h.actor_rol,
-                'funcionalidad_accion': h.funcionalidad_accion,
-                'beneficio_razon': h.beneficio_razon,
-                'criterios_aceptacion': h.criterios_aceptacion,
-                'prioridad': safe_key_conversion(h.prioridad.nombre) if h.prioridad else None,
-                'estado': safe_key_conversion(h.estado.nombre) if h.estado else None,
-                'valor_negocio': h.valor_negocio,
-                'dependencias_relaciones': h.dependencias_relaciones,
-                'componentes_relacionados': h.componentes_relacionados,
-                'notas_adicionales': h.notas_adicionales,
-                'proyecto_id': h.proyecto_id,
-                'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
-                'estimaciones': estimaciones_data,
-                # MANTENER COMPATIBILIDAD: Para historias con una sola estimación
-                'estimacion_valor': estimaciones_data[0]['valor'] if len(estimaciones_data) == 1 else None,
-                'unidad_estimacion': estimaciones_data[0]['tipo_estimacion_nombre'] if len(estimaciones_data) == 1 else None
-            }
-            
-            data.append(historia_data)
-
+        print(f"Historias cargadas correctamente: {len(data)} historias")
+        # Retorna lista vacía si no hay historias - NO retorna error
         return JsonResponse({'historias': data}, status=200)
 
+    except Proyectos.DoesNotExist:
+        return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
     except Exception as e:
+        print(f"Error en listar_historias_usuario: {str(e)}")
         return JsonResponse({'error': f'Error interno del servidor: {str(e)}'}, status=500)
 
 # -----------------------------
@@ -515,6 +541,7 @@ def obtener_estimaciones_historia(request, historia_id):
                 'id': est.id,
                 'tipo_estimacion_id': est.tipo_estimacion.id,
                 'tipo_estimacion_nombre': est.tipo_estimacion.nombre,
+                'tipo_estimacion_color': est.tipo_estimacion.color,
                 'valor': float(est.valor)
             })
 

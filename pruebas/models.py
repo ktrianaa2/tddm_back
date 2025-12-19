@@ -1,3 +1,4 @@
+# pruebas/models.py
 from django.db import models
 from proyectos.models import Proyectos
 import json
@@ -5,6 +6,7 @@ import json
 class TiposPrueba(models.Model):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.TextField(blank=True, null=True)
+    color = models.CharField(max_length=7, default='#6B7280')
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -23,7 +25,7 @@ class Pruebas(models.Model):
     descripcion = models.TextField(blank=True, null=True)
     estado = models.CharField(max_length=50, blank=True, null=True)
     especificacion_relacionada = models.CharField(max_length=100, blank=True, null=True)  
-    prueba = models.TextField(default='{}') 
+    prueba = models.JSONField(default=dict)  # Cambiado a JSONField
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
     activo = models.BooleanField(default=True)
@@ -34,18 +36,3 @@ class Pruebas(models.Model):
 
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
-    
-    # Propiedad para acceder al JSON parseado
-    @property
-    def prueba_json(self):
-        try:
-            return json.loads(self.prueba) if self.prueba else {}
-        except:
-            return {}
-    
-    # Método para establecer el JSON
-    def set_prueba_json(self, data):
-        if isinstance(data, (dict, list)):
-            self.prueba = json.dumps(data, ensure_ascii=False)
-        else:
-            self.prueba = str(data)

@@ -1,3 +1,4 @@
+# pruebas/views.py
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +28,7 @@ def crear_tipo_prueba(request):
     try:
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion', '')
+        color = request.POST.get('color', '#6B7280')
 
         if not nombre:
             return JsonResponse({'error': 'El campo nombre es requerido'}, status=400)
@@ -35,13 +37,15 @@ def crear_tipo_prueba(request):
             tipo_prueba = TiposPrueba.objects.create(
                 nombre=nombre,
                 descripcion=descripcion,
+                color=color,
                 activo=True
             )
 
         return JsonResponse({
             'mensaje': 'Tipo de prueba creado exitosamente',
             'tipo_prueba_id': tipo_prueba.id,
-            'nombre': tipo_prueba.nombre
+            'nombre': tipo_prueba.nombre,
+            'color': tipo_prueba.color
         }, status=201)
 
     except Exception as e:
@@ -65,7 +69,8 @@ def listar_tipos_prueba(request):
             tipos_data.append({
                 'id': tp.id,
                 'nombre': tp.nombre,
-                'descripcion': tp.descripcion
+                'descripcion': tp.descripcion,
+                'color': tp.color
             })
 
         return JsonResponse({'tipos_prueba': tipos_data}, status=200)
@@ -89,7 +94,8 @@ def obtener_tipo_prueba(request, tipo_prueba_id):
         return JsonResponse({
             'id': tipo_prueba.id,
             'nombre': tipo_prueba.nombre,
-            'descripcion': tipo_prueba.descripcion
+            'descripcion': tipo_prueba.descripcion,
+            'color': tipo_prueba.color
         }, status=200)
 
     except TiposPrueba.DoesNotExist:
@@ -113,16 +119,22 @@ def editar_tipo_prueba(request, tipo_prueba_id):
 
         nombre = request.POST.get('nombre')
         descripcion = request.POST.get('descripcion')
+        color = request.POST.get('color')
 
         with transaction.atomic():
             if nombre:
                 tipo_prueba.nombre = nombre
             if descripcion is not None:
                 tipo_prueba.descripcion = descripcion
+            if color:
+                tipo_prueba.color = color
 
             tipo_prueba.save()
 
-        return JsonResponse({'mensaje': 'Tipo de prueba actualizado exitosamente'}, status=200)
+        return JsonResponse({
+            'mensaje': 'Tipo de prueba actualizado exitosamente',
+            'color': tipo_prueba.color
+        }, status=200)
 
     except TiposPrueba.DoesNotExist:
         return JsonResponse({'error': 'Tipo de prueba no encontrado'}, status=404)
@@ -169,7 +181,6 @@ def crear_prueba(request):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
 
     try:
-        # Cambiar a JSON body en lugar de POST
         data = json.loads(request.body.decode('utf-8'))
         
         proyecto_id = data.get('proyecto_id')
@@ -186,19 +197,16 @@ def crear_prueba(request):
                 'error': 'Los campos proyecto_id, tipo_prueba_id, codigo, nombre y prueba son requeridos'
             }, status=400)
 
-        # Validar que el proyecto existe (sin validar usuario)
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
             return JsonResponse({'error': 'El proyecto especificado no existe'}, status=400)
 
-        # Validar que el tipo de prueba existe
         try:
             tipo_prueba = TiposPrueba.objects.get(id=tipo_prueba_id, activo=True)
         except TiposPrueba.DoesNotExist:
             return JsonResponse({'error': 'Tipo de prueba no encontrado'}, status=404)
 
-        # Validar que prueba_data sea un dict/list válido
         if not isinstance(prueba_data, (dict, list)):
             return JsonResponse({'error': 'El campo prueba debe ser un objeto o array JSON válido'}, status=400)
 
@@ -219,7 +227,12 @@ def crear_prueba(request):
             'mensaje': 'Prueba creada exitosamente',
             'prueba_id': prueba.id,
             'codigo': prueba.codigo,
-            'nombre': prueba.nombre
+            'nombre': prueba.nombre,
+            'tipo_prueba': {
+                'id': tipo_prueba.id,
+                'nombre': tipo_prueba.nombre,
+                'color': tipo_prueba.color
+            }
         }, status=201)
 
     except json.JSONDecodeError:
@@ -251,33 +264,20 @@ def listar_pruebas(request, proyecto_id):
 
         pruebas_data = []
         for p in pruebas:
-            prueba_json = p.prueba
-            
-            if prueba_json is None:
-                prueba_json = {}
-            
-            if isinstance(prueba_json, (dict, list)):
-                pass
-            elif isinstance(prueba_json, str):
-                try:
-                    import json
-                    prueba_json = json.loads(prueba_json)
-                except:
-                    prueba_json = {}
-            else:
-                prueba_json = {}
-            
             pruebas_data.append({
                 'id': p.id,
                 'proyecto_id': p.proyecto.id,
-                'tipo_prueba_id': p.tipo_prueba.id,
-                'tipo_prueba_nombre': p.tipo_prueba.nombre,
+                'tipo_prueba': {
+                    'id': p.tipo_prueba.id,
+                    'nombre': p.tipo_prueba.nombre,
+                    'color': p.tipo_prueba.color
+                },
                 'codigo': p.codigo,
                 'nombre': p.nombre,
                 'descripcion': p.descripcion,
                 'estado': p.estado,
                 'especificacion_relacionada': p.especificacion_relacionada,
-                'prueba': prueba_json,
+                'prueba': p.prueba,
                 'fecha_creacion': p.fecha_creacion.isoformat() if p.fecha_creacion else None,
                 'fecha_actualizacion': p.fecha_actualizacion.isoformat() if p.fecha_actualizacion else None
             })
@@ -307,33 +307,20 @@ def obtener_prueba(request, prueba_id):
             activo=True
         )
 
-        prueba_json = prueba.prueba
-        
-        if prueba_json is None:
-            prueba_json = {}
-        
-        # Asegurar que sea serializable
-        if isinstance(prueba_json, (dict, list)):
-            pass
-        elif isinstance(prueba_json, str):
-            try:
-                prueba_json = json.loads(prueba_json)
-            except:
-                prueba_json = {}
-        else:
-            prueba_json = {}
-
         data = {
             'id': prueba.id,
             'proyecto_id': prueba.proyecto.id,
-            'tipo_prueba_id': prueba.tipo_prueba.id,
-            'tipo_prueba_nombre': prueba.tipo_prueba.nombre,
+            'tipo_prueba': {
+                'id': prueba.tipo_prueba.id,
+                'nombre': prueba.tipo_prueba.nombre,
+                'color': prueba.tipo_prueba.color
+            },
             'codigo': prueba.codigo,
             'nombre': prueba.nombre,
             'descripcion': prueba.descripcion,
             'estado': prueba.estado,
             'especificacion_relacionada': prueba.especificacion_relacionada,
-            'prueba': prueba_json,
+            'prueba': prueba.prueba,
             'fecha_creacion': prueba.fecha_creacion.isoformat() if prueba.fecha_creacion else None,
             'fecha_actualizacion': prueba.fecha_actualizacion.isoformat() if prueba.fecha_actualizacion else None
         }
@@ -346,6 +333,7 @@ def obtener_prueba(request, prueba_id):
         traceback.print_exc()
         return JsonResponse({'error': f'Error interno del servidor: {str(e)}'}, status=500)
 
+
 # -----------------------------
 # Editar prueba
 # -----------------------------
@@ -357,12 +345,10 @@ def editar_prueba(request, prueba_id):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
 
     try:
-        # Cambiar a JSON body
         data = json.loads(request.body.decode('utf-8'))
         
-        # Obtener la prueba sin validar usuario
         prueba = get_object_or_404(
-            Pruebas.objects.select_related('proyecto'),
+            Pruebas.objects.select_related('proyecto', 'tipo_prueba'),
             id=prueba_id,
             activo=True
         )
@@ -401,7 +387,12 @@ def editar_prueba(request, prueba_id):
 
         return JsonResponse({
             'mensaje': 'Prueba actualizada exitosamente',
-            'prueba_id': prueba.id
+            'prueba_id': prueba.id,
+            'tipo_prueba': {
+                'id': prueba.tipo_prueba.id,
+                'nombre': prueba.tipo_prueba.nombre,
+                'color': prueba.tipo_prueba.color
+            }
         }, status=200)
 
     except json.JSONDecodeError:
@@ -422,7 +413,6 @@ def eliminar_prueba(request, prueba_id):
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
 
     try:
-        # Obtener la prueba sin validar usuario
         prueba = get_object_or_404(
             Pruebas.objects.select_related('proyecto'),
             id=prueba_id,

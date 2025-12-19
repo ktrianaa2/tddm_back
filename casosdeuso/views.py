@@ -1,9 +1,11 @@
+# casosdeuso/views.py
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from casosdeuso.models import CasosUso, RelacionesCasosUso, EstadosElemento, TiposRelacionCu, Prioridades
+from casosdeuso.models import CasosUso, RelacionesCasosUso
+from catalogos.models import EstadosElemento, TiposRelacionCu, Prioridades
 from proyectos.models import Proyectos
 from usuarios.views import validar_token
 import json
@@ -176,7 +178,7 @@ def obtener_caso_uso(request, caso_uso_id):
         # Obtener el caso de uso
         caso_uso = get_object_or_404(CasosUso, id=caso_uso_id, activo=True)
 
-        # Obtener las relaciones del caso de uso (usar campo correcto)
+        # Obtener las relaciones del caso de uso
         relaciones = RelacionesCasosUso.objects.filter(
             caso_uso_origen_id=caso_uso.id
         ).select_related('tipo_relacion')
@@ -190,6 +192,8 @@ def obtener_caso_uso(request, caso_uso_id):
                     'id': rel.id,
                     'casoUsoRelacionado': rel.caso_uso_destino_id,
                     'tipo': str(rel.tipo_relacion_id),
+                    'tipoNombre': rel.tipo_relacion.nombre,   
+                    'tipoColor': rel.tipo_relacion.color,     
                     'descripcion': rel.descripcion or ''
                 })
             except CasosUso.DoesNotExist:
@@ -208,8 +212,10 @@ def obtener_caso_uso(request, caso_uso_id):
             'requisitos_especiales': caso_uso.requisitos_especiales or '',
             'riesgos_consideraciones': caso_uso.riesgos_consideraciones or '',
             'estado': caso_uso.estado.nombre.lower().replace(' ', '-') if caso_uso.estado else None,
+            'estadoColor': caso_uso.estado.color if caso_uso.estado else None,   
             'proyecto_id': caso_uso.proyecto_id,
             'prioridad': caso_uso.prioridad.nombre if caso_uso.prioridad else None,
+            'prioridadColor': caso_uso.prioridad.color if caso_uso.prioridad else None,   
             'fecha_creacion': caso_uso.fecha_creacion.isoformat() if caso_uso.fecha_creacion else None,
             'relaciones': relaciones_data
         }
@@ -399,8 +405,8 @@ def listar_casos_uso(request, proyecto_id):
         # Obtener casos de uso del proyecto
         casos_uso = CasosUso.objects.filter(
             proyecto_id=proyecto_id, 
-         activo=True
-        ).select_related('estado').prefetch_related('prioridad').order_by('-fecha_creacion')
+            activo=True
+        ).select_related('estado', 'prioridad').order_by('-fecha_creacion')
         
         # Obtener todas las relaciones para incluir el conteo
         relaciones_por_caso = {}
@@ -419,6 +425,7 @@ def listar_casos_uso(request, proyecto_id):
                 relaciones_por_caso[caso_id].append({
                     'id': rel.id,
                     'tipo': rel.tipo_relacion.nombre if rel.tipo_relacion else '',
+                    'tipoColor': rel.tipo_relacion.color if rel.tipo_relacion else None,   
                     'descripcion': rel.descripcion or '',
                     'caso_destino': caso_destino.nombre
                 })
@@ -441,8 +448,10 @@ def listar_casos_uso(request, proyecto_id):
                 'requisitos_especiales': cu.requisitos_especiales or '',
                 'riesgos_consideraciones': cu.riesgos_consideraciones or '',
                 'estado': cu.estado.nombre.lower().replace(' ', '-') if cu.estado else None,
+                'estadoColor': cu.estado.color if cu.estado else None,
                 'proyecto_id': cu.proyecto_id,
                 'prioridad': cu.prioridad.nombre if cu.prioridad else None,
+                'prioridadColor': cu.prioridad.color if cu.prioridad else None, 
                 'fecha_creacion': cu.fecha_creacion.isoformat() if cu.fecha_creacion else None,
                 'relaciones': caso_relaciones
             })
@@ -479,6 +488,8 @@ def obtener_relaciones_caso_uso(request, caso_uso_id):
                     'id': rel.id,
                     'casoUsoRelacionado': rel.caso_uso_destino_id,
                     'tipo': str(rel.tipo_relacion_id),
+                    'tipoNombre': rel.tipo_relacion.nombre,
+                    'tipoColor': rel.tipo_relacion.color,
                     'descripcion': rel.descripcion or ''
                 })
             except CasosUso.DoesNotExist:

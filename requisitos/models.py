@@ -1,49 +1,8 @@
 # requisitos/models.py
 from django.db import models
 from proyectos.models import Proyectos
+from catalogos.models import TiposRequisito, Prioridades, EstadosElemento, TiposRelacionRequisito
 from django.utils import timezone
-
-class TiposRequisito(models.Model):
-    nombre = models.CharField(max_length=50, unique=True)
-    descripcion = models.TextField(blank=True, null=True)
-    activo = models.BooleanField(default=True)  # Added missing field
-
-    class Meta:
-        managed = False
-        db_table = 'tipos_requisito'
-
-    def __str__(self):
-        return self.nombre
-
-
-class Prioridades(models.Model):
-    nombre = models.CharField(max_length=50, unique=True)
-    nivel = models.IntegerField(unique=True)
-    descripcion = models.TextField(blank=True, null=True)
-    activo = models.BooleanField(default=True)  # Added missing field
-
-    class Meta:
-        managed = False
-        db_table = 'prioridades'
-
-    def __str__(self):
-        return self.nombre
-
-
-class EstadosElemento(models.Model):
-    nombre = models.CharField(max_length=50)
-    descripcion = models.TextField(blank=True, null=True)
-    tipo = models.CharField(max_length=20)
-    activo = models.BooleanField(default=True)  # Added missing field
-
-    class Meta:
-        managed = False
-        db_table = 'estados_elemento'
-        unique_together = (('nombre', 'tipo'),)
-
-    def __str__(self):
-        return f"{self.nombre} ({self.tipo})"
-
 
 class Requisitos(models.Model):
     nombre = models.CharField(max_length=200)
@@ -62,19 +21,6 @@ class Requisitos(models.Model):
     class Meta:
         managed = False
         db_table = 'requisitos'
-
-    def __str__(self):
-        return self.nombre
-
-
-class TiposRelacionRequisito(models.Model):
-    nombre = models.CharField(max_length=50, unique=True)
-    descripcion = models.TextField(blank=True, null=True)
-    activo = models.BooleanField(default=True)  # Added missing field
-
-    class Meta:
-        managed = False
-        db_table = 'tipos_relacion_requisito'
 
     def __str__(self):
         return self.nombre
