@@ -1,0 +1,239 @@
+Eres un arquitecto de bases de datos experto. Tu tarea es generar un esquema de base de datos {motor_nombre} basado en las especificaciones funcionales del proyecto.
+
+INFORMACIÓN DEL PROYECTO:
+Nombre: {proyecto_nombre}
+Descripción: {proyecto_descripcion}
+Motor de BD: {motor_nombre}
+
+{especificaciones_requisitos}
+
+{especificaciones_historias}
+
+{especificaciones_casos_uso}
+
+INSTRUCCIONES CRÍTICAS:
+
+1. ANÁLISIS DE ESPECIFICACIONES
+Analiza todas las especificaciones (requisitos, historias, casos de uso) e identifica las entidades y relaciones necesarias.
+
+2. DISEÑO DE TABLAS
+Para cada entidad identificada, crea una tabla con:
+- Columna ID como PRIMARY KEY (INTEGER o SERIAL según {motor_nombre}) - SIEMPRE NOT NULL e incluir AUTO_INCREMENT
+- Columnas para sus atributos con tipos de datos apropiados
+- FOREIGN KEY para relaciones entre entidades - SIEMPRE NOT NULL para relaciones obligatorias
+- Restricciones NOT NULL donde sea necesario (NUNCA en campos opcionales como descripción, observaciones, etc.)
+- Para campos BOOLEAN: SIEMPRE incluir DEFAULT (TRUE o FALSE) y NOT NULL
+- UNIQUE para campos que deben serlo
+- DEFAULT para valores por defecto apropiados
+
+3. REGLAS ESTRICTAS DE NULLABILIDAD:
+- PRIMARY KEY (id): SIEMPRE NOT NULL y AUTO_INCREMENT
+- FOREIGN KEY: NOT NULL solo si la relación es obligatoria, NULL si es opcional
+- BOOLEAN: SIEMPRE NOT NULL con DEFAULT TRUE o FALSE
+- TIMESTAMP de auditoría (fecha_creacion, fecha_actualizacion): SIEMPRE NOT NULL con DEFAULT CURRENT_TIMESTAMP
+- Campos de texto opcionales (descripcion, observaciones, notas): permitir NULL
+- Campos requeridos del negocio: NOT NULL
+
+4. NOMENCLATURA
+- Nombres de tablas en singular en minúsculas: usuario, producto, categoria, cita
+- Nombres de columnas en minúsculas con guiones bajos: nombre_usuario, fecha_creacion
+- IDs foráneos nombrados como: tabla_id (ej: categoria_id, doctor_id, paciente_id)
+
+5. RELACIONES Y CARDINALIDAD
+- **OneToMany (1:N)**: FK en la tabla "muchos" apuntando a la tabla "uno"
+  Ejemplo: Un doctor tiene muchas citas → citas.doctor_id REFERENCES doctores(id)
+  
+- **ManyToMany (N:M)**: tabla de unión intermedia con dos FKs
+  Ejemplo: Estudiantes y Cursos → tabla estudiante_curso con estudiante_id y curso_id
+  
+- **OneToOne (1:1)**: FK con UNIQUE en una de las tablas
+  Ejemplo: Usuario y Perfil → perfil.usuario_id UNIQUE REFERENCES usuarios(id)
+
+- Include ON DELETE CASCADE cuando sea apropiado para integridad referencial
+- Include ON DELETE SET NULL para relaciones opcionales que deben preservarse
+
+6. FORMATO JSON REQUERIDO
+Responde ÚNICAMENTE con este formato JSON válido, sin bloques de código markdown:
+
+{
+  "nombre_bd": "nombre_descriptivo_en_minusculas",
+  "tablas": {
+    "nombre_tabla_1": {
+      "columnas": {
+        "id": {
+          "tipo": "INTEGER",
+          "restricciones": "PRIMARY KEY AUTO_INCREMENT NOT NULL"
+        },
+        "nombre": {
+          "tipo": "VARCHAR(100)",
+          "restricciones": "NOT NULL"
+        },
+        "descripcion": {
+          "tipo": "TEXT",
+          "restricciones": "NULL"
+        },
+        "activo": {
+          "tipo": "BOOLEAN",
+          "restricciones": "NOT NULL DEFAULT TRUE"
+        },
+        "tabla_padre_id": {
+          "tipo": "INTEGER",
+          "restricciones": "NOT NULL",
+          "referencia": "tabla_padre(id)",
+          "on_delete": "CASCADE"
+        },
+        "fecha_creacion": {
+          "tipo": "TIMESTAMP",
+          "restricciones": "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+        },
+        "fecha_actualizacion": {
+          "tipo": "TIMESTAMP",
+          "restricciones": "NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        }
+      },
+      "relaciones": {
+        "tabla_padre": {
+          "tipo": "ManyToOne",
+          "columna_fk": "tabla_padre_id",
+          "tabla_referenciada": "tabla_padre",
+          "cardinalidad": "N:1",
+          "obligatoria": true
+        }
+      }
+    },
+    "tabla_intermedia_muchos_a_muchos": {
+      "columnas": {
+        "id": {
+          "tipo": "INTEGER",
+          "restricciones": "PRIMARY KEY AUTO_INCREMENT NOT NULL"
+        },
+        "tabla_a_id": {
+          "tipo": "INTEGER",
+          "restricciones": "NOT NULL",
+          "referencia": "tabla_a(id)",
+          "on_delete": "CASCADE"
+        },
+        "tabla_b_id": {
+          "tipo": "INTEGER",
+          "restricciones": "NOT NULL",
+          "referencia": "tabla_b(id)",
+          "on_delete": "CASCADE"
+        },
+        "fecha_creacion": {
+          "tipo": "TIMESTAMP",
+          "restricciones": "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "relaciones": {
+        "tabla_a": {
+          "tipo": "ManyToMany",
+          "columna_fk": "tabla_a_id",
+          "tabla_referenciada": "tabla_a",
+          "cardinalidad": "N:M",
+          "obligatoria": true,
+          "tabla_intermedia": true
+        },
+        "tabla_b": {
+          "tipo": "ManyToMany",
+          "columna_fk": "tabla_b_id",
+          "tabla_referenciada": "tabla_b",
+          "cardinalidad": "N:M",
+          "obligatoria": true,
+          "tabla_intermedia": true
+        }
+      },
+      "indices": [
+        {
+          "nombre": "idx_unico_relacion",
+          "columnas": ["tabla_a_id", "tabla_b_id"],
+          "tipo": "UNIQUE"
+        }
+      ]
+    }
+  }
+}
+
+7. EJEMPLO CORRECTO DE TABLA CITAS:
+{
+  "citas": {
+    "columnas": {
+      "id": {
+        "tipo": "INTEGER",
+        "restricciones": "PRIMARY KEY AUTO_INCREMENT NOT NULL"
+      },
+      "hora": {
+        "tipo": "TIME",
+        "restricciones": "NOT NULL"
+      },
+      "fecha": {
+        "tipo": "DATE",
+        "restricciones": "NOT NULL"
+      },
+      "estado": {
+        "tipo": "VARCHAR(50)",
+        "restricciones": "NOT NULL DEFAULT 'pendiente'"
+      },
+      "doctor_id": {
+        "tipo": "INTEGER",
+        "restricciones": "NOT NULL",
+        "referencia": "doctores(id)",
+        "on_delete": "RESTRICT"
+      },
+      "paciente_id": {
+        "tipo": "INTEGER",
+        "restricciones": "NOT NULL",
+        "referencia": "pacientes(id)",
+        "on_delete": "CASCADE"
+      },
+      "observaciones": {
+        "tipo": "TEXT",
+        "restricciones": "NULL"
+      },
+      "fecha_creacion": {
+        "tipo": "TIMESTAMP",
+        "restricciones": "NOT NULL DEFAULT CURRENT_TIMESTAMP"
+      },
+      "fecha_actualizacion": {
+        "tipo": "TIMESTAMP",
+        "restricciones": "NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+      }
+    },
+    "relaciones": {
+      "doctor": {
+        "tipo": "ManyToOne",
+        "columna_fk": "doctor_id",
+        "tabla_referenciada": "doctores",
+        "cardinalidad": "N:1",
+        "obligatoria": true
+      },
+      "paciente": {
+        "tipo": "ManyToOne",
+        "columna_fk": "paciente_id",
+        "tabla_referenciada": "pacientes",
+        "cardinalidad": "N:1",
+        "obligatoria": true
+      }
+    },
+    "indices": [
+      {
+        "nombre": "idx_fecha_hora",
+        "columnas": ["fecha", "hora"],
+        "tipo": "INDEX"
+      }
+    ]
+  }
+}
+
+8. CONSIDERACIONES IMPORTANTES
+- PRIMARY KEY siempre debe ser NOT NULL y AUTO_INCREMENT
+- FOREIGN KEY debe ser NOT NULL solo si la relación es obligatoria
+- BOOLEAN siempre debe tener DEFAULT y NOT NULL
+- Incluye sección "relaciones" para documentar cardinalidad y tipo de relación
+- Incluye índices necesarios para optimizar consultas frecuentes
+- Incluye tablas de auditoría (fecha_creacion, fecha_actualizacion) cuando sea relevante
+- Incluye campo "activo" BOOLEAN NOT NULL DEFAULT TRUE para soft deletes si es aplicable
+- Diseña para escalabilidad y mantenibilidad
+- Minimiza redundancia de datos
+- Asegúrate de que las relaciones reflejen los flujos descritos
+
+GENERA AHORA EL ESQUEMA JSON. Responde ÚNICAMENTE con el JSON válido, sin texto adicional o bloques de código.

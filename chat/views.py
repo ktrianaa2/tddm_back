@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 import json
+import os
 from google import genai
 from django.conf import settings
 
@@ -13,8 +14,7 @@ from proyectos.models import Proyectos
 from usuarios.views import validar_token
 from usuarios.models import Usuarios
 from proyectos.views import cambiar_proyecto_a_generacion
-
-# Asumo que estos modelos existen en sus respectivas apps
+from esquemas_bd.models import *
 from requisitos.models import Requisitos
 from historiasdeusuario.models import HistoriasUsuario, HistoriasEstimaciones
 from casosdeuso.models import CasosUso, RelacionesCasosUso
@@ -28,7 +28,6 @@ except AttributeError:
 
 MODEL_NAME = "gemini-2.5-flash"
 
-
 # Mapeo de prefijos por tipo de prueba
 PREFIJOS_TIPO_PRUEBA = {
     'unitaria': 'UNIT-TEST',
@@ -40,27 +39,17 @@ PREFIJOS_TIPO_PRUEBA = {
 def generar_codigo_prueba(proyecto_id, tipo_prueba_nombre):
     """
     Genera el siguiente código de prueba disponible para un proyecto y tipo específico.
-    
-    Args:
-        proyecto_id: ID del proyecto
-        tipo_prueba_nombre: Nombre del tipo de prueba (ej: 'unitaria', 'integracion')
-    
-    Returns:
-        String con el código generado (ej: 'UNIT-TEST-P001-005')
     """
-    # Obtener el prefijo según el tipo de prueba
     prefijo = PREFIJOS_TIPO_PRUEBA.get(
         tipo_prueba_nombre.lower(), 
         'TEST'
     )
     
-    # Obtener el tipo de prueba
     try:
         tipo_prueba = TiposPrueba.objects.get(nombre=tipo_prueba_nombre.lower())
     except TiposPrueba.DoesNotExist:
         tipo_prueba = None
     
-    # Contar pruebas existentes del mismo tipo en el proyecto
     if tipo_prueba:
         count = Pruebas.objects.filter(
             proyecto_id=proyecto_id,
@@ -73,21 +62,229 @@ def generar_codigo_prueba(proyecto_id, tipo_prueba_nombre):
             activo=True
         ).count()
     
-    # Incrementar para el siguiente número
     numero_prueba = count + 1
-    
-    # Formatear: PREFIJO-P{proyecto_id}-{numero}
-    # Ejemplo: UNIT-TEST-P001-005
     codigo = f"{prefijo}-P{proyecto_id:03d}-{numero_prueba:03d}"
     
     return codigo
 
-# -----------------------------
-# Generar pruebas unitarias con IA
-# -----------------------------
+
+def obtener_especificaciones_proyecto(proyecto_id):
+    """
+    Obtiene todas las especificaciones de un proyecto
+    """
+    especificaciones = {
+        'tiene_especificaciones': False,
+        'requisitos': [],
+        'historias_usuario': [],
+        'casos_uso': []
+    }
+
+    try:
+        requisitos = Requisitos.objects.filter(
+            proyecto_id=proyecto_id,
+            activo=True
+        ).select_related('tipo', 'prioridad', 'estado')
+
+        for req in requisitos:
+            especificaciones['requisitos'].append({
+                'id': req.id,
+                'nombre': req.nombre,
+                'descripcion': req.descripcion,
+                'tipo': req.tipo.nombre if req.tipo else None,
+                'criterios': req.criterios,
+                'prioridad': req.prioridad.nombre if req.prioridad else None,
+                'condiciones_previas': req.condiciones_previas
+            })
+    except Exception as e:
+        print(f"Error al obtener requisitos: {e}")
+
+    try:
+        historias = HistoriasUsuario.objects.filter(
+            proyecto_id=proyecto_id,
+            activo=True
+        ).select_related('prioridad', 'estado')
+
+        for historia in historias:
+            especificaciones['historias_usuario'].append({
+                'id': historia.id,
+                'titulo': historia.titulo,
+                'actor_rol': historia.actor_rol,
+                'funcionalidad_accion': historia.funcionalidad_accion,
+                'beneficio_razon': historia.beneficio_razon,
+                'criterios_aceptacion': historia.criterios_aceptacion,
+                'prioridad': historia.prioridad.nombre if historia.prioridad else None
+            })
+    except Exception as e:
+        print(f"Error al obtener historias: {e}")
+
+    try:
+        casos = CasosUso.objects.filter(
+            proyecto_id=proyecto_id,
+            activo=True
+        ).select_related('estado')
+
+        for caso in casos:
+            especificaciones['casos_uso'].append({
+                'id': caso.id,
+                'nombre': caso.nombre,
+                'descripcion': caso.descripcion,
+                'actores': caso.actores,
+                'precondiciones': caso.precondiciones,
+                'flujo_principal': caso.flujo_principal,
+                'flujos_alternativos': caso.flujos_alternativos,
+                'postcondiciones': caso.postcondiciones
+            })
+    except Exception as e:
+        print(f"Error al obtener casos de uso: {e}")
+
+    especificaciones['tiene_especificaciones'] = (
+        len(especificaciones['requisitos']) > 0 or
+        len(especificaciones['historias_usuario']) > 0 or
+        len(especificaciones['casos_uso']) > 0
+    )
+
+    return especificaciones
+
+
+def cargar_template_prompt(especificaciones):
+    """
+    Carga el template del prompt desde el archivo pruebas_unitarias.txt
+    y lo rellena con las especificaciones del proyecto.
+    
+    Args:
+        especificaciones: Dict con proyecto, requisitos, historias y casos de uso
+    
+    Returns:
+        String con el prompt completo listo para usar
+    """
+    try:
+        # Construir la ruta al archivo dentro de la app 'chat'
+        views_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(views_dir, 'prompts', 'pruebas_unitarias.txt')
+        
+        # Verificar si el archivo existe
+        if not os.path.exists(prompt_path):
+            raise FileNotFoundError(f"Archivo de prompt no encontrado en: {prompt_path}")
+        
+        # Leer el archivo
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            template = f.read()
+        
+        proyecto = especificaciones['proyecto']
+        
+        # Preparar las especificaciones formateadas
+        especificaciones_requisitos = ""
+        if especificaciones['requisitos']:
+            especificaciones_requisitos = "REQUISITOS DEL SISTEMA:\n"
+            for req in especificaciones['requisitos']:
+                especificaciones_requisitos += f"\nID: {req['id']}\n"
+                especificaciones_requisitos += f"Nombre: {req['nombre']}\n"
+                especificaciones_requisitos += f"Descripción: {req['descripcion']}\n"
+                especificaciones_requisitos += f"Tipo: {req['tipo']}\n"
+                especificaciones_requisitos += f"Criterios de aceptación: {req['criterios']}\n"
+                if req.get('condiciones_previas'):
+                    especificaciones_requisitos += f"Condiciones previas: {req['condiciones_previas']}\n"
+                especificaciones_requisitos += "---\n"
+        
+        especificaciones_historias = ""
+        if especificaciones['historias_usuario']:
+            especificaciones_historias = "\nHISTORIAS DE USUARIO:\n"
+            for historia in especificaciones['historias_usuario']:
+                especificaciones_historias += f"\nID: {historia['id']}\n"
+                especificaciones_historias += f"Título: {historia['titulo']}\n"
+                especificaciones_historias += f"Como {historia['actor_rol']}, quiero {historia['funcionalidad_accion']} para {historia['beneficio_razon']}\n"
+                especificaciones_historias += f"Criterios de aceptación: {historia['criterios_aceptacion']}\n"
+                especificaciones_historias += "---\n"
+        
+        especificaciones_casos = ""
+        if especificaciones['casos_uso']:
+            especificaciones_casos = "\nCASOS DE USO:\n"
+            for caso in especificaciones['casos_uso']:
+                especificaciones_casos += f"\nID: {caso['id']}\n"
+                especificaciones_casos += f"Nombre: {caso['nombre']}\n"
+                especificaciones_casos += f"Descripción: {caso['descripcion']}\n"
+                especificaciones_casos += f"Actores: {caso['actores']}\n"
+                especificaciones_casos += f"Precondiciones: {caso['precondiciones']}\n"
+                especificaciones_casos += f"Flujo principal: {caso['flujo_principal']}\n"
+                if caso.get('flujos_alternativos'):
+                    especificaciones_casos += f"Flujos alternativos: {caso['flujos_alternativos']}\n"
+                especificaciones_casos += f"Postcondiciones: {caso['postcondiciones']}\n"
+                especificaciones_casos += "---\n"
+        
+        # Serializar correctamente los atributos del proyecto
+        proyecto_nombre = proyecto.nombre if hasattr(proyecto, 'nombre') else 'No especificado'
+        proyecto_descripcion = proyecto.descripcion if hasattr(proyecto, 'descripcion') else 'No especificada'
+        
+        # Reemplazar usando replace() para evitar conflictos con llaves {}
+        prompt_completo = template.replace(
+            '{proyecto_nombre}', proyecto_nombre
+        ).replace(
+            '{proyecto_descripcion}', proyecto_descripcion
+        ).replace(
+            '{especificaciones_requisitos}', especificaciones_requisitos
+        ).replace(
+            '{especificaciones_historias}', especificaciones_historias
+        ).replace(
+            '{especificaciones_casos_uso}', especificaciones_casos
+        )
+        
+        return prompt_completo
+    
+    except FileNotFoundError as e:
+        print(f"[ERROR] {str(e)}")
+        raise
+    except Exception as e:
+        print(f"[ERROR] Error al cargar el template del prompt: {str(e)}")
+        raise
+
+
+def parsear_respuesta_ia(texto):
+    """
+    Parsea la respuesta de la IA de forma simple y directa.
+    Primero intenta JSON directo, luego extrae del markdown si es necesario.
+    """
+    texto = texto.strip()
+    
+    # Intentar parsear directamente
+    try:
+        return json.loads(texto)
+    except json.JSONDecodeError:
+        pass
+    
+    # Si falla, limpiar markdown y extraer JSON
+    # Remover bloques markdown
+    if '```json' in texto:
+        inicio = texto.find('```json') + 7
+        fin = texto.find('```', inicio)
+        if fin != -1:
+            texto = texto[inicio:fin].strip()
+    elif '```' in texto:
+        inicio = texto.find('```') + 3
+        fin = texto.find('```', inicio)
+        if fin != -1:
+            texto = texto[inicio:fin].strip()
+    
+    # Buscar el objeto JSON principal
+    inicio = texto.find('{')
+    fin = texto.rfind('}') + 1
+    if inicio != -1 and fin > inicio:
+        texto = texto[inicio:fin]
+    
+    # Intentar parsear nuevamente
+    try:
+        return json.loads(texto)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"No se pudo parsear JSON: {e.msg} en línea {e.lineno}, columna {e.colno}"
+        )
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def generar_pruebas_unitarias(request, proyecto_id):
+    """
+    Genera pruebas unitarias automáticamente usando IA y las guarda en la BD.
+    """
     payload = validar_token(request)
     if not payload or 'error' in payload:
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
@@ -96,7 +293,7 @@ def generar_pruebas_unitarias(request, proyecto_id):
         print("=" * 50)
         print(f"[DEBUG] Iniciando generación para proyecto {proyecto_id}")
         
-        # Validar proyecto
+        # Obtener proyecto
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
             print(f"[DEBUG] Proyecto encontrado: {proyecto.nombre}, Estado: {proyecto.estado}")
@@ -107,6 +304,7 @@ def generar_pruebas_unitarias(request, proyecto_id):
         # Obtener especificaciones
         print("[DEBUG] Obteniendo especificaciones...")
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
+        especificaciones['proyecto'] = proyecto
         print(f"[DEBUG] Especificaciones obtenidas: {especificaciones['tiene_especificaciones']}")
         
         if not especificaciones['tiene_especificaciones']:
@@ -114,10 +312,10 @@ def generar_pruebas_unitarias(request, proyecto_id):
                 'error': 'No hay especificaciones en el proyecto para generar pruebas'
             }, status=400)
 
-        # Construir prompt
-        print("[DEBUG] Construyendo prompt...")
-        prompt = construir_prompt_pruebas(proyecto, especificaciones)
-        print(f"[DEBUG] Prompt creado, longitud: {len(prompt)} caracteres")
+        # Cargar prompt
+        print("[DEBUG] Cargando template del prompt...")
+        prompt = cargar_template_prompt(especificaciones)
+        print(f"[DEBUG] Prompt cargado, longitud: {len(prompt)} caracteres")
 
         # Llamar a IA
         print("[DEBUG] Llamando a Gemini API...")
@@ -127,33 +325,21 @@ def generar_pruebas_unitarias(request, proyecto_id):
         )
         print("[DEBUG] Respuesta de IA recibida")
         
-        # En tu función generar_pruebas_unitarias:
-
         pruebas_generadas = response.text
         print(f"[DEBUG] Texto generado, primeros 200 chars: {pruebas_generadas[:200]}")
 
-        # AGREGAR LIMPIEZA PREVIA
-        print("[DEBUG] Limpiando formato de IA...")
-        pruebas_generadas = limpiar_json_ia(pruebas_generadas)
-        print(f"[DEBUG] Texto limpiado, primeros 200 chars: {pruebas_generadas[:200]}")
-
         # Parsear respuesta
-        print("[DEBUG] Parseando JSON...")
+        print("[DEBUG] Parseando respuesta...")
         try:
-            pruebas_json = json.loads(pruebas_generadas)
+            pruebas_json = parsear_respuesta_ia(pruebas_generadas)
             print(f"[DEBUG] JSON parseado correctamente, {len(pruebas_json.get('pruebas', []))} pruebas")
-        except json.JSONDecodeError as e:
-            print(f"[DEBUG] Error parseando JSON directo, intentando extraer... Error: {e}")
-            try:
-                pruebas_json = extraer_json_de_respuesta(pruebas_generadas)
-                print(f"[DEBUG] JSON extraído correctamente")
-            except Exception as extract_error:
-                print(f"[ERROR] Fallo total al parsear: {extract_error}")
-                return JsonResponse({
-                    'error': 'No se pudo procesar la respuesta de la IA',
-                    'detalle': str(extract_error),
-                    'respuesta_ia': pruebas_generadas[:500]
-                }, status=500)
+        except ValueError as e:
+            print(f"[ERROR] Error al parsear: {e}")
+            return JsonResponse({
+                'error': 'No se pudo procesar la respuesta de la IA',
+                'detalle': str(e),
+                'respuesta_ia': pruebas_generadas[:500]
+            }, status=500)
 
         # Obtener tipo de prueba
         print("[DEBUG] Obteniendo tipo de prueba...")
@@ -166,16 +352,18 @@ def generar_pruebas_unitarias(request, proyecto_id):
         )
         print(f"[DEBUG] Tipo de prueba: {tipo_prueba.id}")
 
-        # Guardar pruebas
+        # Guardar pruebas en BD
         print("[DEBUG] Guardando pruebas en BD...")
         pruebas_creadas = []
         with transaction.atomic():
             for idx, prueba_data in enumerate(pruebas_json.get('pruebas', [])):
                 print(f"[DEBUG] Procesando prueba {idx + 1}...")
                 
+                # Generar código único
                 codigo_generado = generar_codigo_prueba(proyecto_id, tipo_prueba.nombre)
                 print(f"[DEBUG] Código generado: {codigo_generado}")
                 
+                # Procesar detalles
                 detalles_completos = prueba_data.get('detalles', {})
                 
                 if isinstance(detalles_completos, str):
@@ -190,6 +378,7 @@ def generar_pruebas_unitarias(request, proyecto_id):
                 prueba_json_str = json.dumps(detalles_completos, ensure_ascii=False)
                 print(f"[DEBUG] JSON detalles longitud: {len(prueba_json_str)}")
                 
+                # Crear prueba
                 try:
                     prueba = Pruebas.objects.create(
                         proyecto=proyecto,
@@ -214,7 +403,7 @@ def generar_pruebas_unitarias(request, proyecto_id):
                     print(f"[ERROR] Error al crear prueba en BD: {db_error}")
                     raise
             
-            # Cambio de estado
+            # Cambiar estado del proyecto
             if pruebas_creadas:
                 print("[DEBUG] Cambiando estado del proyecto...")
                 cambio_exitoso, mensaje_cambio = cambiar_proyecto_a_generacion(proyecto_id)
@@ -224,15 +413,19 @@ def generar_pruebas_unitarias(request, proyecto_id):
                 estado_actualizado = False
                 mensaje_cambio = "No se crearon pruebas"
 
+        # Refrescar proyecto
         proyecto.refresh_from_db()
         print(f"[DEBUG] Proceso completado exitosamente")
         print("=" * 50)
+
+        # Serializar estado correctamente
+        proyecto_estado = proyecto.estado.nombre if hasattr(proyecto.estado, 'nombre') else str(proyecto.estado)
 
         return JsonResponse({
             'mensaje': f'Se generaron {len(pruebas_creadas)} pruebas unitarias exitosamente',
             'proyecto_id': proyecto_id,
             'proyecto_nombre': proyecto.nombre,
-            'proyecto_estado': proyecto.estado,
+            'proyecto_estado': proyecto_estado,
             'cambio_estado': estado_actualizado,
             'mensaje_cambio_estado': mensaje_cambio,
             'pruebas_creadas': pruebas_creadas,
@@ -247,33 +440,37 @@ def generar_pruebas_unitarias(request, proyecto_id):
         print("=" * 50)
         return JsonResponse({'error': f'Error al generar pruebas: {str(e)}'}, status=500)
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def previsualizar_pruebas(request, proyecto_id):
     """
     Genera las pruebas pero no las guarda, permite al usuario revisarlas primero.
-    Muestra los códigos que se asignarían.
     """
     payload = validar_token(request)
     if not payload or 'error' in payload:
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
 
     try:
-        # Validar que el proyecto existe y está activo
+        # Obtener proyecto
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
             return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
 
+        # Obtener especificaciones
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
+        especificaciones['proyecto'] = proyecto
         
         if not especificaciones['tiene_especificaciones']:
             return JsonResponse({
                 'error': 'No hay especificaciones en el proyecto para generar pruebas'
             }, status=400)
 
-        prompt = construir_prompt_pruebas(proyecto, especificaciones)
+        # Cargar prompt
+        prompt = cargar_template_prompt(especificaciones)
 
+        # Llamar a IA
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=[prompt]
@@ -281,12 +478,16 @@ def previsualizar_pruebas(request, proyecto_id):
 
         pruebas_generadas = response.text
         
+        # Parsear respuesta
         try:
-            pruebas_json = json.loads(pruebas_generadas)
-        except json.JSONDecodeError:
-            pruebas_json = extraer_json_de_respuesta(pruebas_generadas)
+            pruebas_json = parsear_respuesta_ia(pruebas_generadas)
+        except ValueError as e:
+            return JsonResponse({
+                'error': 'No se pudo procesar la respuesta de la IA',
+                'detalle': str(e)
+            }, status=500)
 
-        # Obtener o crear el tipo de prueba "Unitaria"
+        # Obtener tipo de prueba
         tipo_prueba, _ = TiposPrueba.objects.get_or_create(
             nombre="unitaria",
             defaults={
@@ -295,7 +496,7 @@ def previsualizar_pruebas(request, proyecto_id):
             }
         )
 
-        # Agregar códigos provisionales a las pruebas para previsualización
+        # Generar códigos provisionales
         pruebas_con_codigo = []
         contador = Pruebas.objects.filter(
             proyecto_id=proyecto_id,
@@ -310,11 +511,14 @@ def previsualizar_pruebas(request, proyecto_id):
             prueba['codigo_provisional'] = codigo_provisional
             pruebas_con_codigo.append(prueba)
 
+        # Serializar estado correctamente
+        proyecto_estado_actual = proyecto.estado.nombre if hasattr(proyecto.estado, 'nombre') else str(proyecto.estado)
+
         return JsonResponse({
             'mensaje': 'Pruebas generadas (sin guardar)',
             'proyecto_id': proyecto_id,
             'proyecto_nombre': proyecto.nombre,
-            'proyecto_estado_actual': proyecto.estado,
+            'proyecto_estado_actual': proyecto_estado_actual,
             'total_pruebas': len(pruebas_con_codigo),
             'pruebas': pruebas_con_codigo,
             'info': 'Los códigos mostrados son provisionales. Al guardar, el proyecto pasará a fase "Generación"'
@@ -325,460 +529,324 @@ def previsualizar_pruebas(request, proyecto_id):
         traceback.print_exc()
         return JsonResponse({'error': f'Error al generar pruebas: {str(e)}'}, status=500)
 
-def obtener_especificaciones_proyecto(proyecto_id):
+
+# ========================================
+# GENERAR ESQUEMA DE BASE DE DATOS CON IA
+# ========================================
+
+def cargar_template_prompt_esquema_bd(proyecto, tipo_motor, especificaciones):
     """
-    Obtiene todas las especificaciones de un proyecto (requisitos, historias, casos de uso)
-    """
-    especificaciones = {
-        'tiene_especificaciones': False,
-        'requisitos': [],
-        'historias_usuario': [],
-        'casos_uso': []
-    }
-
-    # Obtener requisitos
-    try:
-        requisitos = Requisitos.objects.filter(
-            proyecto_id=proyecto_id,
-            activo=True
-        ).select_related('tipo', 'prioridad', 'estado')
-
-        for req in requisitos:
-            especificaciones['requisitos'].append({
-                'id': req.id,
-                'nombre': req.nombre,
-                'descripcion': req.descripcion,
-                'tipo': req.tipo.nombre if req.tipo else None,
-                'criterios': req.criterios,
-                'prioridad': req.prioridad.nombre if req.prioridad else None,
-                'condiciones_previas': req.condiciones_previas
-            })
-    except Exception as e:
-        print(f"Error al obtener requisitos: {e}")
-
-    # Obtener historias de usuario
-    try:
-        historias = HistoriasUsuario.objects.filter(
-            proyecto_id=proyecto_id,
-            activo=True
-        ).select_related('prioridad', 'estado')
-
-        for historia in historias:
-            especificaciones['historias_usuario'].append({
-                'id': historia.id,
-                'titulo': historia.titulo,
-                'actor_rol': historia.actor_rol,
-                'funcionalidad_accion': historia.funcionalidad_accion,
-                'beneficio_razon': historia.beneficio_razon,
-                'criterios_aceptacion': historia.criterios_aceptacion,
-                'prioridad': historia.prioridad.nombre if historia.prioridad else None
-            })
-    except Exception as e:
-        print(f"Error al obtener historias: {e}")
-
-    # Obtener casos de uso
-    try:
-        casos = CasosUso.objects.filter(
-            proyecto_id=proyecto_id,
-            activo=True
-        ).select_related('estado')
-
-        for caso in casos:
-            especificaciones['casos_uso'].append({
-                'id': caso.id,
-                'nombre': caso.nombre,
-                'descripcion': caso.descripcion,
-                'actores': caso.actores,
-                'precondiciones': caso.precondiciones,
-                'flujo_principal': caso.flujo_principal,
-                'flujos_alternativos': caso.flujos_alternativos,
-                'postcondiciones': caso.postcondiciones
-            })
-    except Exception as e:
-        print(f"Error al obtener casos de uso: {e}")
-
-    # Verificar si hay al menos una especificación
-    especificaciones['tiene_especificaciones'] = (
-        len(especificaciones['requisitos']) > 0 or
-        len(especificaciones['historias_usuario']) > 0 or
-        len(especificaciones['casos_uso']) > 0
-    )
-
-    return especificaciones
-
-def construir_prompt_pruebas(proyecto, especificaciones):
-    """
-    Construye un prompt optimizado para generar pruebas unitarias ejecutables en pytest
-    con cobertura completa y sin redundancias.
-    """
-    prompt = f"""Eres un ingeniero de pruebas experto en pytest y TDD. Tu tarea es generar pruebas unitarias ejecutables en Python/pytest basadas en las especificaciones del proyecto.
-
-INFORMACIÓN DEL PROYECTO:
-Nombre: {proyecto.nombre}
-Descripción: {proyecto.descripcion if hasattr(proyecto, 'descripcion') else 'No especificada'}
-
-"""
-
-    # Agregar especificaciones del proyecto
-    if especificaciones['requisitos']:
-        prompt += "REQUISITOS DEL SISTEMA:\n"
-        for req in especificaciones['requisitos']:
-            prompt += f"\nID: {req['id']}\n"
-            prompt += f"Nombre: {req['nombre']}\n"
-            prompt += f"Descripción: {req['descripcion']}\n"
-            prompt += f"Tipo: {req['tipo']}\n"
-            prompt += f"Criterios de aceptación: {req['criterios']}\n"
-            if req.get('condiciones_previas'):
-                prompt += f"Condiciones previas: {req['condiciones_previas']}\n"
-            prompt += "---\n"
-
-    if especificaciones['historias_usuario']:
-        prompt += "\nHISTORIAS DE USUARIO:\n"
-        for historia in especificaciones['historias_usuario']:
-            prompt += f"\nID: {historia['id']}\n"
-            prompt += f"Título: {historia['titulo']}\n"
-            prompt += f"Como {historia['actor_rol']}, quiero {historia['funcionalidad_accion']} para {historia['beneficio_razon']}\n"
-            prompt += f"Criterios de aceptación: {historia['criterios_aceptacion']}\n"
-            prompt += "---\n"
-
-    if especificaciones['casos_uso']:
-        prompt += "\nCASOS DE USO:\n"
-        for caso in especificaciones['casos_uso']:
-            prompt += f"\nID: {caso['id']}\n"
-            prompt += f"Nombre: {caso['nombre']}\n"
-            prompt += f"Descripción: {caso['descripcion']}\n"
-            prompt += f"Actores: {caso['actores']}\n"
-            prompt += f"Precondiciones: {caso['precondiciones']}\n"
-            prompt += f"Flujo principal: {caso['flujo_principal']}\n"
-            if caso.get('flujos_alternativos'):
-                prompt += f"Flujos alternativos: {caso['flujos_alternativos']}\n"
-            prompt += f"Postcondiciones: {caso['postcondiciones']}\n"
-            prompt += "---\n"
-
-    prompt += """
-REGLAS CRÍTICAS PARA EL FORMATO JSON:
-
-1. NUNCA uses comillas dobles dentro de valores de texto en el JSON
-2. Si necesitas citas o términos especiales, usa comillas simples o guiones
-3. Ejemplo CORRECTO: "El usuario debe tener el rol de administrador"
-4. Ejemplo INCORRECTO: "El usuario debe tener el rol de "administrador""
-5. NO incluyas bloques de código markdown
-6. NO incluyas texto explicativo antes o después del JSON
-7. Responde ÚNICAMENTE con el JSON válido
-
-INSTRUCCIONES PARA GENERACIÓN DE PRUEBAS:
-
-1. ANÁLISIS DE ESPECIFICACIONES
-Antes de generar pruebas, identifica funcionalidades que aparecen en múltiples especificaciones. Si una funcionalidad está documentada en varios lugares, genera un conjunto único de pruebas que cubra todos los aspectos relacionados.
-
-2. COBERTURA DE PRUEBAS REQUERIDA
-Para cada funcionalidad identificada, debes cubrir obligatoriamente:
-- Caso exitoso con datos válidos y completos
-- Casos de validación de datos obligatorios
-- Casos de validación de tipos de datos incorrectos
-- Casos de validación de formatos inválidos
-- Casos de validación de reglas de negocio
-- Casos de valores límite
-- Casos de condiciones previas no cumplidas
-- Casos de estados inconsistentes o datos duplicados
-
-3. CÓDIGO EJECUTABLE EN PYTEST
-Cada paso debe contener código Python real que se pueda ejecutar en pytest. No uses pseudocódigo ni descripciones textuales.
-
-EJEMPLO DE PASO CORRECTO:
-{
-  "paso": 1,
-  "accion": "producto = {'codigo': 'PRD001', 'nombre': 'Laptop HP', 'precio': 899.99, 'stock': 0}",
-  "resultado_esperado": "Diccionario con producto creado con stock en 0"
-}
-
-EJEMPLO DE PASO INCORRECTO:
-{
-  "paso": 1,
-  "accion": "Crear objeto producto",
-  "resultado_esperado": "Producto creado"
-}
-
-4. ESTRUCTURA DE PASOS
-Los pasos deben seguir esta secuencia lógica:
-- Preparación: Configurar mocks, fixtures y datos de entrada
-- Ejecución: Invocar la función o método bajo prueba
-- Verificación: Usar asserts de pytest para validar resultados
-- Limpieza: Si es necesario, resetear estados o mocks
-
-5. NOMENCLATURA DE PRUEBAS
-Los nombres de las pruebas deben seguir el formato:
-test_[accion]_[condicion]_[resultado_esperado]
-
-EJEMPLOS CORRECTOS:
-- test_registrar_producto_con_datos_validos_retorna_producto_guardado
-- test_registrar_producto_con_precio_negativo_lanza_excepcion
-- test_registrar_producto_con_codigo_duplicado_retorna_error
-- test_buscar_producto_inexistente_retorna_none
-- test_actualizar_stock_con_cantidad_negativa_lanza_value_error
-
-6. DATOS DE PRUEBA
-El campo entrada debe contener un diccionario Python literal válido, no una descripción textual.
-
-CORRECTO:
-"entrada": "{'codigo': 'PRD001', 'nombre': 'Laptop', 'precio': 999.99, 'stock': 5}"
-
-INCORRECTO:
-"entrada": "Datos válidos de producto"
-
-7. FORMATO DE RESPUESTA JSON
-Debes responder únicamente con un objeto JSON válido. NO incluyas:
-- Bloques de código markdown
-- Texto explicativo antes o después del JSON
-- Comillas dobles dentro de valores de texto
-- Caracteres de escape inválidos
-
-ESTRUCTURA EXACTA DEL JSON:
-{
-  "pruebas": [
-    {
-      "nombre": "test_[accion]_[condicion]_[resultado]",
-      "descripcion": "Descripción clara sin usar comillas dobles internas",
-      "especificacion_relacionada": "ID o nombre de la especificación que cubre",
-      "detalles": {
-        "objetivo": "Objetivo específico de la prueba",
-        "precondiciones": [
-          "Lista de condiciones sin comillas dobles internas"
-        ],
-        "pasos": [
-          {
-            "paso": 1,
-            "accion": "código Python ejecutable",
-            "resultado_esperado": "Descripción del resultado esperado"
-          }
-        ],
-        "datos_prueba": {
-          "entrada": "diccionario Python literal con datos de entrada",
-          "salida_esperada": "diccionario Python literal con resultado esperado"
-        },
-        "criterios_aceptacion": [
-          "Lista de condiciones que deben cumplirse para que la prueba pase"
-        ],
-        "tipo_validacion": "funcional"
-      }
-    }
-  ]
-}
-
-8. CONSIDERACIONES TÉCNICAS
-- Usa fixtures de pytest cuando sea apropiado
-- Utiliza mocks para dependencias externas
-- Implementa parametrize para casos similares con diferentes datos
-- Usa asserts específicos de pytest
-- Considera el uso de markers para categorizar pruebas
-
-9. CALIDAD Y MANTENIBILIDAD
-- Cada prueba debe ser independiente y poder ejecutarse aisladamente
-- Los nombres deben ser descriptivos y auto-explicativos
-- El código debe ser limpio y seguir PEP 8
-- Las aserciones deben incluir mensajes descriptivos cuando sea relevante
-- Evita lógica compleja dentro de las pruebas
-
-GENERA AHORA EL JSON CON LAS PRUEBAS. Responde ÚNICAMENTE con el JSON, sin bloques de código markdown ni texto adicional:"""
-
-    return prompt
-
-import re
-import re
-import json
-
-def extraer_json_de_respuesta(texto):
-    """
-    Extrae y limpia JSON de la respuesta de la IA, manejando múltiples problemas comunes.
+    Carga el template del prompt desde esquema_bd.txt y lo rellena con datos.
+    
+    Args:
+        proyecto: Instancia del modelo Proyectos
+        tipo_motor: Instancia del modelo TiposMotorBd
+        especificaciones: Dict con requisitos, historias y casos de uso
+    
+    Returns:
+        String con el prompt completo listo para usar
     """
     try:
-        # Paso 1: Extraer el contenido JSON
-        json_str = texto.strip()
+        # Construir la ruta al archivo
+        views_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(views_dir, 'prompts', 'esquema_bd.txt')
         
-        # Remover bloques de código markdown
-        if '```json' in json_str:
-            inicio = json_str.find('```json') + 7
-            fin = json_str.find('```', inicio)
-            if fin == -1:
-                fin = len(json_str)
-            json_str = json_str[inicio:fin].strip()
-        elif '```' in json_str:
-            inicio = json_str.find('```') + 3
-            fin = json_str.find('```', inicio)
-            if fin == -1:
-                fin = len(json_str)
-            json_str = json_str[inicio:fin].strip()
+        # Verificar si el archivo existe
+        if not os.path.exists(prompt_path):
+            raise FileNotFoundError(f"Archivo de prompt no encontrado en: {prompt_path}")
         
-        # Buscar entre llaves si no se encontró markdown
-        if not json_str.startswith('{'):
-            inicio = json_str.find('{')
-            fin = json_str.rfind('}') + 1
-            if inicio != -1 and fin > inicio:
-                json_str = json_str[inicio:fin]
+        # Leer el archivo
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            template = f.read()
         
-        # Paso 2: Limpiar saltos de línea literales dentro de strings
-        # Esto es CRÍTICO para evitar "Invalid control character"
-        def limpiar_strings(match):
-            """Limpia el contenido de un string JSON"""
-            content = match.group(1)
-            # Reemplazar saltos de línea literales por espacios
-            content = content.replace('\n', ' ')
-            content = content.replace('\r', ' ')
-            content = content.replace('\t', ' ')
-            # Reemplazar múltiples espacios por uno solo
-            content = re.sub(r'\s+', ' ', content)
-            # Escapar comillas dobles internas
-            content = content.replace('"', '\\"')
-            return f'"{content}"'
+        # Preparar especificaciones formateadas (reutilizando lógica similar)
+        especificaciones_requisitos = ""
+        if especificaciones['requisitos']:
+            especificaciones_requisitos = "REQUISITOS DEL SISTEMA:\n"
+            for req in especificaciones['requisitos']:
+                especificaciones_requisitos += f"\n- {req['nombre']}: {req['descripcion']}\n"
+                if req.get('criterios'):
+                    especificaciones_requisitos += f"  Criterios: {req['criterios']}\n"
         
-        # Aplicar limpieza a todos los valores de string
-        # Este patrón captura: "cualquier contenido" después de :
-        json_str = re.sub(
-            r':\s*"([^"\\]*(?:\\.[^"\\]*)*)"',
-            lambda m: ': "' + m.group(1).replace('\n', ' ').replace('\r', ' ').replace('\t', ' ') + '"',
-            json_str,
-            flags=re.DOTALL
+        especificaciones_historias = ""
+        if especificaciones['historias_usuario']:
+            especificaciones_historias = "\nHISTORIAS DE USUARIO:\n"
+            for historia in especificaciones['historias_usuario']:
+                especificaciones_historias += f"\n- {historia['titulo']}\n"
+                especificaciones_historias += f"  Como {historia['actor_rol']}, quiero {historia['funcionalidad_accion']} para {historia['beneficio_razon']}\n"
+                if historia.get('criterios_aceptacion'):
+                    especificaciones_historias += f"  Criterios: {historia['criterios_aceptacion']}\n"
+        
+        especificaciones_casos = ""
+        if especificaciones['casos_uso']:
+            especificaciones_casos = "\nCASOS DE USO:\n"
+            for caso in especificaciones['casos_uso']:
+                especificaciones_casos += f"\n- {caso['nombre']}: {caso['descripcion']}\n"
+                if caso.get('actores'):
+                    especificaciones_casos += f"  Actores: {caso['actores']}\n"
+                if caso.get('precondiciones'):
+                    especificaciones_casos += f"  Precondiciones: {caso['precondiciones']}\n"
+        
+        # Extraer datos del proyecto y motor de forma segura
+        proyecto_nombre = proyecto.nombre if hasattr(proyecto, 'nombre') else 'No especificado'
+        proyecto_descripcion = proyecto.descripcion if hasattr(proyecto, 'descripcion') else 'No especificada'
+        motor_nombre = tipo_motor.nombre if hasattr(tipo_motor, 'nombre') else 'No especificado'
+        
+        # Reemplazar placeholders
+        prompt_completo = template.replace(
+            '{motor_nombre}', motor_nombre
+        ).replace(
+            '{proyecto_nombre}', proyecto_nombre
+        ).replace(
+            '{proyecto_descripcion}', proyecto_descripcion
+        ).replace(
+            '{especificaciones_requisitos}', especificaciones_requisitos
+        ).replace(
+            '{especificaciones_historias}', especificaciones_historias
+        ).replace(
+            '{especificaciones_casos_uso}', especificaciones_casos
         )
         
-        # Paso 3: Intentar parsear
+        return prompt_completo
+    
+    except FileNotFoundError as e:
+        print(f"[ERROR] {str(e)}")
+        raise
+    except Exception as e:
+        print(f"[ERROR] Error al cargar el template del prompt de esquema BD: {str(e)}")
+        raise
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def generar_esquema_bd(request, proyecto_id):
+    """
+    Genera un esquema de base de datos automáticamente basado en las 
+    especificaciones del proyecto (requisitos, historias, casos de uso).
+    Permite múltiples esquemas por proyecto (diferentes motores).
+    """
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+
+    try:
+        body = json.loads(request.body)
+        tipo_motor_id = body.get('tipo_motor_id')
+        
+        if not tipo_motor_id:
+            return JsonResponse({
+                'error': 'El campo tipo_motor_id es requerido'
+            }, status=400)
+        
+        print("=" * 60)
+        print(f"[DEBUG] Iniciando generación de esquema para proyecto {proyecto_id}")
+        print(f"[DEBUG] Tipo de motor: {tipo_motor_id}")
+        
+        # Validar proyecto
         try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            print(f"[DEBUG] Error en primer intento: {e}")
-            print(f"[DEBUG] Posición del error: línea {e.lineno}, columna {e.colno}")
-            
-            # Paso 4: Limpieza más agresiva
-            # Dividir en líneas y limpiar cada una
-            lines = json_str.split('\n')
-            cleaned_lines = []
-            
-            for line in lines:
-                # Si la línea contiene un valor de string con saltos de línea
-                if '": "' in line or "': '" in line:
-                    # Encontrar todas las posiciones de comillas
-                    parts = line.split('": "', 1)
-                    if len(parts) == 2:
-                        key_part = parts[0]
-                        value_part = parts[1]
-                        
-                        # Limpiar la parte del valor
-                        # Encontrar el final del string (última comilla antes de , o } o ])
-                        end_markers = [',', '}', ']']
-                        end_pos = len(value_part)
-                        
-                        for marker in end_markers:
-                            pos = value_part.rfind('"')
-                            if pos != -1:
-                                end_pos = pos
-                                break
-                        
-                        if end_pos < len(value_part):
-                            value_content = value_part[:end_pos]
-                            value_rest = value_part[end_pos:]
-                            
-                            # Limpiar saltos de línea y tabs
-                            value_content = value_content.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-                            value_content = re.sub(r'\s+', ' ', value_content)
-                            
-                            line = key_part + '": "' + value_content + value_rest
-                
-                cleaned_lines.append(line)
-            
-            json_str_cleaned = '\n'.join(cleaned_lines)
-            
-            try:
-                return json.loads(json_str_cleaned)
-            except json.JSONDecodeError as e2:
-                print(f"[DEBUG] Error en segundo intento: {e2}")
-                
-                # Paso 5: Método más agresivo - procesar carácter por carácter
-                result = []
-                in_string = False
-                escape_next = False
-                
-                for i, char in enumerate(json_str_cleaned):
-                    if escape_next:
-                        result.append(char)
-                        escape_next = False
-                        continue
-                    
-                    if char == '\\':
-                        result.append(char)
-                        escape_next = True
-                        continue
-                    
-                    if char == '"':
-                        in_string = not in_string
-                        result.append(char)
-                        continue
-                    
-                    # Si estamos dentro de un string y encontramos caracteres de control
-                    if in_string:
-                        if char in ['\n', '\r', '\t']:
-                            result.append(' ')  # Reemplazar por espacio
-                        elif ord(char) < 32:  # Otros caracteres de control
-                            result.append(' ')
-                        else:
-                            result.append(char)
-                    else:
-                        result.append(char)
-                
-                json_str_final = ''.join(result)
-                return json.loads(json_str_final)
+            proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
+            print(f"[DEBUG] Proyecto encontrado: {proyecto.nombre}")
+        except Proyectos.DoesNotExist:
+            print(f"[ERROR] Proyecto {proyecto_id} no existe")
+            return JsonResponse({
+                'error': 'El proyecto especificado no existe'
+            }, status=404)
         
-    except json.JSONDecodeError as e:
-        # Guardar información detallada del error
-        error_pos = getattr(e, 'pos', 0)
-        start = max(0, error_pos - 100)
-        end = min(len(json_str), error_pos + 100)
-        context = json_str[start:end]
+        # Validar tipo de motor
+        try:
+            tipo_motor = TiposMotorBd.objects.get(id=tipo_motor_id, activo=True)
+            print(f"[DEBUG] Motor de BD: {tipo_motor.nombre}")
+        except TiposMotorBd.DoesNotExist:
+            print(f"[ERROR] Tipo de motor {tipo_motor_id} no existe")
+            return JsonResponse({
+                'error': 'El tipo de motor especificado no existe'
+            }, status=404)
         
-        print(f"[ERROR] JSON problemático (contexto):")
-        print(f"[ERROR] ...{context}...")
-        print(f"[ERROR] Posición del error: {error_pos}")
+        # Obtener especificaciones (reutilizando función)
+        print("[DEBUG] Obteniendo especificaciones del proyecto...")
+        especificaciones = obtener_especificaciones_proyecto(proyecto_id)
+        print(f"[DEBUG] Especificaciones obtenidas")
         
-        raise ValueError(
-            f"No se pudo extraer JSON válido de la respuesta de la IA. "
-            f"Error: {str(e)}. "
-            f"Línea: {getattr(e, 'lineno', '?')}, Columna: {getattr(e, 'colno', '?')}. "
-            f"Contexto: ...{context}..."
+        if not especificaciones['tiene_especificaciones']:
+            print("[ERROR] No hay especificaciones en el proyecto")
+            return JsonResponse({
+                'error': 'El proyecto debe tener al menos un requisito, historia de usuario o caso de uso para generar el esquema de BD'
+            }, status=400)
+        
+        # Verificar que no exista esquema para este proyecto + motor específico
+        if EsquemasBd.objects.filter(
+            proyecto_id=proyecto_id, 
+            tipo_motor_bd_id=tipo_motor_id,
+            activo=True
+        ).exists():
+            print("[ADVERTENCIA] Ya existe un esquema para este proyecto + motor")
+            return JsonResponse({
+                'error': f'Ya existe un esquema activo para {tipo_motor.nombre}. Edita el existente o desactívalo primero'
+            }, status=409)
+        
+        # Cargar prompt desde template
+        print("[DEBUG] Cargando template del prompt...")
+        prompt = cargar_template_prompt_esquema_bd(proyecto, tipo_motor, especificaciones)
+        print(f"[DEBUG] Prompt cargado, longitud: {len(prompt)} caracteres")
+        
+        # Llamar a IA
+        print("[DEBUG] Llamando a Gemini API...")
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[prompt]
         )
-    
+        print("[DEBUG] Respuesta de IA recibida")
+        
+        respuesta_ia = response.text
+        print(f"[DEBUG] Primeros 300 caracteres: {respuesta_ia[:300]}")
+        
+        # Parsear respuesta (reutilizando lógica)
+        print("[DEBUG] Parseando respuesta...")
+        try:
+            esquema_json = parsear_respuesta_ia(respuesta_ia)
+            print("[DEBUG] JSON parseado correctamente")
+        except ValueError as e:
+            print(f"[ERROR] Error al parsear: {e}")
+            return JsonResponse({
+                'error': 'No se pudo procesar la respuesta de la IA',
+                'detalle': str(e),
+                'respuesta_ia': respuesta_ia[:500]
+            }, status=500)
+        
+        # Validar estructura del esquema
+        print("[DEBUG] Validando estructura del esquema...")
+        if not esquema_json.get('tablas'):
+            print("[ERROR] El esquema no contiene tablas")
+            return JsonResponse({
+                'error': 'El esquema generado no contiene tablas válidas'
+            }, status=500)
+        
+        # Guardar esquema
+        print("[DEBUG] Guardando esquema en BD...")
+        try:
+            with transaction.atomic():
+                esquema = EsquemasBd.objects.create(
+                    proyecto=proyecto,
+                    tipo_motor_bd=tipo_motor,
+                    esquema=esquema_json,
+                    activo=True
+                )
+                print(f"[DEBUG] Esquema guardado con ID: {esquema.id}")
+        except Exception as db_error:
+            print(f"[ERROR] Error al guardar en BD: {db_error}")
+            return JsonResponse({
+                'error': f'Error al guardar el esquema: {str(db_error)}'
+            }, status=500)
+        
+        print("[DEBUG] Proceso completado exitosamente")
+        print("=" * 60)
+        
+        return JsonResponse({
+            'mensaje': 'Esquema de BD generado exitosamente',
+            'esquema_id': esquema.id,
+            'proyecto_id': proyecto_id,
+            'proyecto_nombre': proyecto.nombre,
+            'motor_bd': tipo_motor.nombre,
+            'tablas': list(esquema_json.get('tablas', {}).keys()),
+            'total_tablas': len(esquema_json.get('tablas', {})),
+            'esquema': esquema_json
+        }, status=201)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'El body de la solicitud no es JSON válido'
+        }, status=400)
     except Exception as e:
-        raise ValueError(f"Error inesperado al procesar la respuesta de la IA: {str(e)}")
-
-
-def limpiar_json_ia(json_str):
+        import traceback
+        print("=" * 60)
+        print(f"[ERROR FATAL] {str(e)}")
+        traceback.print_exc()
+        print("=" * 60)
+        return JsonResponse({
+            'error': f'Error al generar esquema: {str(e)}'
+        }, status=500)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def previsualizar_esquema_bd(request, proyecto_id):
     """
-    Función auxiliar para pre-limpiar el JSON antes del parseo principal.
-    Maneja casos específicos de formato de código Python multi-línea.
+    Genera un esquema de BD sin guardar, permite al usuario revisarlo primero.
     """
-    # Remover bloques markdown
-    json_str = re.sub(r'```json\s*', '', json_str)
-    json_str = re.sub(r'```\s*', '', json_str)
-    
-    # Encontrar el JSON real
-    inicio = json_str.find('{')
-    fin = json_str.rfind('}') + 1
-    if inicio != -1 and fin > inicio:
-        json_str = json_str[inicio:fin]
-    
-    # Reemplazar saltos de línea literales en valores de string
-    # Patrón para capturar: "accion": "código con\nsaltos\nde línea"
-    def fix_multiline_code(match):
-        key = match.group(1)
-        value = match.group(2)
-        # Convertir saltos de línea a espacios y limpiar
-        value_clean = value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-        value_clean = re.sub(r'\s+', ' ', value_clean).strip()
-        return f'"{key}": "{value_clean}"'
-    
-    # Aplicar fix a campos que típicamente contienen código
-    json_str = re.sub(
-        r'"(accion|codigo|entrada|salida_esperada)":\s*"([^"]*(?:\n[^"]*)*)"',
-        fix_multiline_code,
-        json_str,
-        flags=re.DOTALL
-    )
-    
-    return json_str
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+
+    try:
+        body = json.loads(request.body)
+        tipo_motor_id = body.get('tipo_motor_id')
+        
+        if not tipo_motor_id:
+            return JsonResponse({
+                'error': 'El campo tipo_motor_id es requerido'
+            }, status=400)
+        
+        # Validar proyecto
+        try:
+            proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
+        except Proyectos.DoesNotExist:
+            return JsonResponse({
+                'error': 'El proyecto especificado no existe'
+            }, status=404)
+        
+        # Validar tipo de motor
+        try:
+            tipo_motor = TiposMotorBd.objects.get(id=tipo_motor_id, activo=True)
+        except TiposMotorBd.DoesNotExist:
+            return JsonResponse({
+                'error': 'El tipo de motor especificado no existe'
+            }, status=404)
+        
+        # Obtener especificaciones (reutilizando función)
+        especificaciones = obtener_especificaciones_proyecto(proyecto_id)
+        
+        if not especificaciones['tiene_especificaciones']:
+            return JsonResponse({
+                'error': 'El proyecto debe tener al menos una especificación'
+            }, status=400)
+        
+        # Generar prompt desde template
+        prompt = cargar_template_prompt_esquema_bd(proyecto, tipo_motor, especificaciones)
+        
+        # Llamar a IA
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[prompt]
+        )
+        
+        respuesta_ia = response.text
+        
+        # Parsear respuesta (reutilizando función)
+        try:
+            esquema_json = parsear_respuesta_ia(respuesta_ia)
+        except ValueError as e:
+            return JsonResponse({
+                'error': 'No se pudo procesar la respuesta de la IA',
+                'detalle': str(e)
+            }, status=500)
+        
+        return JsonResponse({
+            'mensaje': 'Esquema generado (sin guardar)',
+            'proyecto_id': proyecto_id,
+            'proyecto_nombre': proyecto.nombre,
+            'motor_bd': tipo_motor.nombre,
+            'tablas': list(esquema_json.get('tablas', {}).keys()),
+            'total_tablas': len(esquema_json.get('tablas', {})),
+            'esquema': esquema_json,
+            'info': 'Esta es una previsualización. Los datos no se guardarán hasta que confirmes'
+        }, status=200)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'El body de la solicitud no es JSON válido'
+        }, status=400)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'error': f'Error al generar esquema: {str(e)}'
+        }, status=500)

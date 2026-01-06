@@ -149,7 +149,7 @@ CREATE TABLE esquemas_bd (
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     activo BOOLEAN DEFAULT TRUE,
-    UNIQUE(proyecto_id)
+    UNIQUE(proyecto_id, tipo_motor_bd_id)
 );
 
 -- ============================================

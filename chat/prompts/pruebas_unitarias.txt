@@ -1,0 +1,140 @@
+Eres un ingeniero de pruebas experto. Genera pruebas unitarias en pytest basadas en las especificaciones del proyecto.
+
+PROYECTO:
+Nombre: {proyecto_nombre}
+Descripción: {proyecto_descripcion}
+
+{especificaciones_requisitos}
+
+{especificaciones_historias}
+
+{especificaciones_casos_uso}
+
+=== INSTRUCCIONES CRÍTICAS DE FORMATO ===
+
+RESPONDE ÚNICAMENTE CON JSON PURO. Sin texto adicional, sin bloques markdown, sin explicaciones.
+
+Tu respuesta DEBE comenzar con {{ y terminar con }}
+
+NO INCLUYAS:
+❌ ```json
+❌ ```
+❌ Texto antes del JSON
+❌ Texto después del JSON
+❌ Comillas dobles dentro de valores de texto (usa comillas simples)
+
+EJEMPLO DE RESPUESTA CORRECTA:
+{
+  "pruebas": [
+    {
+      "nombre": "test_ejemplo",
+      "descripcion": "Descripción simple sin comillas dobles internas"
+    }
+  ]
+}
+
+=== REGLAS PARA GENERAR PRUEBAS ===
+
+1. COBERTURA OBLIGATORIA POR FUNCIONALIDAD:
+   • Caso exitoso con datos válidos
+   • Validación de campos obligatorios
+   • Validación de tipos de datos incorrectos
+   • Validación de formatos inválidos
+   • Reglas de negocio
+   • Valores límite
+   • Condiciones previas no cumplidas
+   • Estados inconsistentes
+
+2. CÓDIGO EJECUTABLE REAL:
+   Usa código Python/pytest ejecutable, NO pseudocódigo.
+
+   ✅ CORRECTO:
+   "accion": "usuario = {'id': 1, 'rol': 'admin', 'activo': True}"
+   
+   ❌ INCORRECTO:
+   "accion": "Crear objeto usuario"
+
+3. NOMENCLATURA DE PRUEBAS:
+   Formato: test_[accion]_[condicion]_[resultado]
+   
+   Ejemplos:
+   • test_crear_usuario_con_email_valido_retorna_usuario_guardado
+   • test_crear_usuario_con_email_duplicado_lanza_validation_error
+   • test_actualizar_usuario_inexistente_retorna_none
+
+4. DATOS DE PRUEBA:
+   Usa diccionarios Python literales válidos.
+   
+   ✅ CORRECTO:
+   "entrada": "{'nombre': 'Juan', 'edad': 25, 'activo': True}"
+   
+   ❌ INCORRECTO:
+   "entrada": "Datos válidos de usuario"
+
+5. ESTRUCTURA DE PASOS:
+   • Preparación: Setup de mocks/fixtures
+   • Ejecución: Llamada a función bajo prueba
+   • Verificación: Asserts de pytest
+   • Limpieza: Reseteo si es necesario
+
+=== ESTRUCTURA JSON EXACTA ===
+
+{
+  "pruebas": [
+    {
+      "nombre": "test_nombre_descriptivo_sin_comillas_dobles",
+      "descripcion": "Qué se está probando (sin comillas dobles internas)",
+      "especificacion_relacionada": "ID o nombre de req/historia/caso",
+      "detalles": {
+        "objetivo": "Objetivo específico de esta prueba",
+        "precondiciones": [
+          "Condición 1 necesaria antes de ejecutar",
+          "Condición 2 necesaria"
+        ],
+        "pasos": [
+          {
+            "paso": 1,
+            "accion": "codigo_python_ejecutable_aqui",
+            "resultado_esperado": "Qué debe ocurrir tras este paso"
+          },
+          {
+            "paso": 2,
+            "accion": "resultado = funcion_bajo_prueba(datos)",
+            "resultado_esperado": "Función ejecutada sin errores"
+          },
+          {
+            "paso": 3,
+            "accion": "assert resultado is not None",
+            "resultado_esperado": "Resultado no es None"
+          }
+        ],
+        "datos_prueba": {
+          "entrada": "{'campo1': 'valor1', 'campo2': 123, 'campo3': True}",
+          "salida_esperada": "{'id': 1, 'status': 'success', 'created': True}"
+        },
+        "criterios_aceptacion": [
+          "Criterio 1 que debe cumplirse",
+          "Criterio 2 que debe cumplirse"
+        ],
+        "tipo_validacion": "funcional"
+      }
+    }
+  ]
+}
+
+=== CONSIDERACIONES TÉCNICAS ===
+
+• Usa @pytest.fixture para datos compartidos
+• Usa @pytest.mark.parametrize para casos similares con diferentes datos
+• Usa unittest.mock.patch para dependencias externas
+• Incluye mensajes descriptivos en asserts: assert x == y, "Mensaje claro"
+• Cada prueba debe ser independiente
+
+=== CALIDAD ===
+
+• Nombres auto-explicativos
+• Código limpio según PEP 8
+• Sin lógica compleja en las pruebas
+• Pruebas aisladas e independientes
+
+GENERA AHORA EL JSON. Recuerda: Solo JSON puro, sin markdown, sin texto adicional.

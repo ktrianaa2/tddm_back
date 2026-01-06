@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'historiasdeusuario',
     'catalogos',
     'pruebas',
+    'esquemas_bd',
 ]
 
 MIDDLEWARE = [
