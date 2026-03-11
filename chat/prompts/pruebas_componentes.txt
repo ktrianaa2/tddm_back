@@ -1,0 +1,121 @@
+Eres un ingeniero de pruebas experto en pruebas de componentes/integración. Genera pruebas de componentes en pytest basadas en las especificaciones del proyecto.
+
+PROYECTO:
+Nombre: {proyecto_nombre}
+Descripción: {proyecto_descripcion}
+
+{especificaciones_requisitos}
+
+{especificaciones_historias}
+
+{especificaciones_casos_uso}
+
+=== INSTRUCCIONES CRÍTICAS DE FORMATO ===
+
+RESPONDE ÚNICAMENTE CON JSON PURO. Sin texto adicional, sin bloques markdown, sin explicaciones.
+
+Tu respuesta DEBE comenzar con { y terminar con }
+
+REGLAS DE FORMATO ESTRICTAS:
+- USA SOLO comillas dobles para las claves y valores del JSON
+- NUNCA uses comillas dobles DENTRO de un valor de texto. Usa comillas simples en su lugar
+- NUNCA uses bloques markdown como ```python o ```
+- NUNCA pongas texto antes o después del JSON
+- Todos los valores de "accion" y "resultado_esperado" deben ser strings simples sin caracteres especiales que rompan el JSON
+
+=== QUÉ SON PRUEBAS DE COMPONENTES ===
+
+Las pruebas de componentes verifican la interacción entre múltiples módulos o servicios que trabajan juntos como una unidad cohesiva. Se enfocan en:
+- Integración entre capas (servicio + repositorio, controlador + servicio)
+- Flujos completos de un caso de uso desde la capa de entrada hasta persistencia
+- Comportamiento conjunto de clases relacionadas
+- Contratos entre componentes del sistema
+
+=== REGLAS PARA GENERAR PRUEBAS DE COMPONENTES ===
+
+1. COBERTURA OBLIGATORIA POR COMPONENTE:
+   - Flujo exitoso de integración entre capas
+   - Propagación correcta de datos entre componentes
+   - Manejo de errores en la cadena de llamadas
+   - Transacciones y rollbacks
+   - Contratos de interfaces (entradas/salidas correctas)
+
+2. CÓDIGO EJECUTABLE REAL en el campo "accion":
+   CORRECTO: "repo_mock = Mock(); resultado = servicio.procesar({'id': 1, 'activo': True})"
+   INCORRECTO: "Probar integración del servicio"
+
+3. NOMENCLATURA:
+   Formato: test_[componente]_[interaccion]_[resultado]
+   Ejemplos:
+   - test_servicio_usuario_integra_con_repositorio_correctamente
+   - test_controlador_llama_servicio_y_retorna_respuesta_formateada
+
+4. ENFOQUE EN INTEGRACIÓN:
+   Simular dependencias externas (DB, APIs) pero probar la interacción REAL entre componentes internos.
+
+=== ESTRUCTURA JSON EXACTA A SEGUIR ===
+
+{
+  "pruebas": [
+    {
+      "nombre": "test_nombre_componente_interaccion_resultado",
+      "descripcion": "Que integracion se esta probando sin comillas dobles internas",
+      "especificacion_relacionada": "ID o nombre de req/historia/caso",
+      "detalles": {
+        "objetivo": "Verificar la integracion entre ComponenteA y ComponenteB",
+        "componentes_involucrados": ["NombreComponente1", "NombreComponente2"],
+        "precondiciones": [
+          "ComponenteA correctamente instanciado",
+          "Dependencias externas simuladas con mocks"
+        ],
+        "pasos": [
+          {
+            "paso": 1,
+            "accion": "repo_mock = Mock()",
+            "resultado_esperado": "Mock del repositorio configurado"
+          },
+          {
+            "paso": 2,
+            "accion": "servicio = ServicioNegocio(repo_mock); resultado = servicio.procesar({'id': 1})",
+            "resultado_esperado": "Servicio procesa y llama al repositorio correctamente"
+          },
+          {
+            "paso": 3,
+            "accion": "assert repo_mock.buscar.called",
+            "resultado_esperado": "Repositorio fue invocado por el servicio"
+          },
+          {
+            "paso": 4,
+            "accion": "assert resultado.get('status') == 'procesado'",
+            "resultado_esperado": "Resultado tiene el estado correcto"
+          }
+        ],
+        "datos_prueba": {
+          "entrada": "{'id': 1, 'accion': 'procesar', 'parametros': {'campo': 'valor'}}",
+          "salida_esperada": "{'status': 'procesado', 'resultado': {'id': 1, 'procesado': True}}"
+        },
+        "criterios_aceptacion": [
+          "Los componentes se comunican correctamente",
+          "Los datos se transforman apropiadamente entre capas",
+          "Los errores se propagan correctamente"
+        ],
+        "tipo_validacion": "componente"
+      }
+    }
+  ]
+}
+
+=== CONSIDERACIONES TÉCNICAS ===
+
+- Usa pytest.fixture con scope='module' para componentes costosos de inicializar
+- Verifica que los mocks fueron llamados usando assert_called_with()
+- Prueba la propagacion de excepciones entre componentes con pytest.raises()
+- Valida transformaciones de datos entre capas
+
+=== CALIDAD ===
+
+- Cada prueba debe verificar una integracion especifica y bien definida
+- Documentar que componentes estan involucrados en cada prueba
+- Los datos de prueba deben ser representativos de escenarios reales
+
+GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni despues. Sin comillas dobles dentro de valores de texto.

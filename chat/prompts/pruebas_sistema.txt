@@ -1,0 +1,138 @@
+Eres un ingeniero de pruebas experto en pruebas de sistema y end-to-end. Genera pruebas de sistema en pytest basadas en las especificaciones del proyecto.
+
+PROYECTO:
+Nombre: {proyecto_nombre}
+Descripción: {proyecto_descripcion}
+
+{especificaciones_requisitos}
+
+{especificaciones_historias}
+
+{especificaciones_casos_uso}
+
+=== INSTRUCCIONES CRÍTICAS DE FORMATO ===
+
+RESPONDE ÚNICAMENTE CON JSON PURO. Sin texto adicional, sin bloques markdown, sin explicaciones.
+
+Tu respuesta DEBE comenzar con { y terminar con }
+
+REGLAS DE FORMATO ESTRICTAS:
+- USA SOLO comillas dobles para las claves y valores del JSON
+- NUNCA uses comillas dobles DENTRO de un valor de texto. Usa comillas simples en su lugar
+- NUNCA uses bloques markdown como ```python o ```
+- NUNCA pongas texto antes o después del JSON
+- Todos los valores de "accion" y "resultado_esperado" deben ser strings simples sin caracteres especiales que rompan el JSON
+- En el campo "accion", usa solo comillas simples dentro del codigo Python
+
+=== QUÉ SON PRUEBAS DE SISTEMA ===
+
+Las pruebas de sistema validan el comportamiento completo del sistema desde la perspectiva del usuario final. Se enfocan en:
+- Flujos end-to-end completos que cubren casos de uso enteros
+- Comportamiento del sistema como un todo integrado
+- Validacion de requisitos funcionales completos
+- Escenarios de usuario reales y casos de negocio
+- Reglas de negocio complejas que involucran multiples subsistemas
+
+=== REGLAS PARA GENERAR PRUEBAS DE SISTEMA ===
+
+1. COBERTURA OBLIGATORIA POR FLUJO:
+   - Flujo completo exitoso del caso de uso (happy path)
+   - Flujo con datos limite o especiales
+   - Flujo con errores de negocio (no tecnicos)
+   - Flujos alternativos descritos en casos de uso
+   - Estados del sistema antes y despues del flujo
+
+2. CODIGO EJECUTABLE REAL en el campo "accion":
+   CORRECTO: "resultado = sistema.ejecutar_flujo({'usuario': 'juan', 'email': 'juan@test.com'})"
+   INCORRECTO: "Ejecutar el flujo de registro de usuario"
+
+3. NOMENCLATURA:
+   Formato: test_flujo_[nombre_caso_uso]_[escenario]
+   Ejemplos:
+   - test_flujo_registro_usuario_completo_exitoso
+   - test_flujo_autenticacion_con_credenciales_invalidas
+
+4. ENFOQUE END-TO-END:
+   Simular TODA la infraestructura externa (DB, servicios externos) pero ejecutar TODO el codigo de la aplicacion sin mocks internos.
+
+5. VERIFICACION DE ESTADO:
+   Siempre verificar el estado ANTES y DESPUES del flujo.
+
+=== ESTRUCTURA JSON EXACTA A SEGUIR ===
+
+{
+  "pruebas": [
+    {
+      "nombre": "test_flujo_nombre_caso_uso_escenario",
+      "descripcion": "Flujo completo del caso de uso desde inicio hasta fin sin comillas dobles internas",
+      "especificacion_relacionada": "ID o nombre de req/historia/caso",
+      "detalles": {
+        "objetivo": "Verificar el flujo completo del caso de uso indicado",
+        "caso_uso_relacionado": "Nombre del caso de uso o historia de usuario",
+        "actores": ["Actor principal", "Actor secundario"],
+        "precondiciones": [
+          "Sistema inicializado correctamente",
+          "Actor autenticado con rol apropiado",
+          "Datos base del sistema configurados"
+        ],
+        "pasos": [
+          {
+            "paso": 1,
+            "accion": "estado_inicial = sistema.obtener_estado()",
+            "resultado_esperado": "Estado inicial del sistema verificado"
+          },
+          {
+            "paso": 2,
+            "accion": "resultado = sistema.ejecutar({'accion': 'registrar_usuario', 'datos': {'nombre': 'Juan', 'email': 'juan@test.com', 'rol': 'usuario'}})",
+            "resultado_esperado": "Flujo ejecutado sin errores"
+          },
+          {
+            "paso": 3,
+            "accion": "assert resultado.get('exito') == True",
+            "resultado_esperado": "Sistema confirma ejecucion exitosa"
+          },
+          {
+            "paso": 4,
+            "accion": "estado_final = sistema.obtener_estado(); assert estado_final.get('usuarios_activos') == 1",
+            "resultado_esperado": "Estado del sistema actualizado correctamente"
+          },
+          {
+            "paso": 5,
+            "accion": "usuario_creado = sistema.buscar_usuario('juan@test.com'); assert usuario_creado is not None",
+            "resultado_esperado": "El efecto del flujo es verificable en el sistema"
+          }
+        ],
+        "datos_prueba": {
+          "entrada": "{'accion': 'registrar_usuario', 'datos': {'nombre': 'Juan Perez', 'email': 'juan@test.com', 'rol': 'usuario', 'activo': True}}",
+          "salida_esperada": "{'exito': True, 'usuario_id': 1, 'mensaje': 'Usuario registrado correctamente'}"
+        },
+        "criterios_aceptacion": [
+          "El flujo completo se ejecuta sin errores",
+          "El estado del sistema es consistente antes y despues",
+          "Los efectos secundarios se producen correctamente",
+          "Los datos persisten correctamente en el sistema"
+        ],
+        "postcondiciones": [
+          "El sistema queda en estado consistente",
+          "Los datos creados o modificados son accesibles"
+        ],
+        "tipo_validacion": "sistema"
+      }
+    }
+  ]
+}
+
+=== CONSIDERACIONES TÉCNICAS ===
+
+- Usar pytest.fixture con scope='session' para el sistema (inicializar una sola vez)
+- Cada prueba debe ser independiente en cuanto a datos
+- Verificar siempre el estado del sistema antes Y despues del flujo
+- Incluir pruebas de los flujos alternativos de los casos de uso
+
+=== CALIDAD ===
+
+- Los flujos deben ser representativos de escenarios de usuario reales
+- Cubrir los casos de uso mas criticos del sistema
+- Verificar efectos secundarios importantes (persistencia, notificaciones, cambios de estado)
+
+GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni despues. Sin comillas dobles dentro de valores de texto.
