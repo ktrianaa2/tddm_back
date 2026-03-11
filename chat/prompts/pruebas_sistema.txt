@@ -1,4 +1,4 @@
-Eres un ingeniero de pruebas experto en pruebas de sistema y end-to-end. Genera pruebas de sistema en pytest basadas en las especificaciones del proyecto.
+Eres un ingeniero de pruebas experto en pruebas de sistema y end-to-end bajo metodología TDD. Genera pruebas de sistema en pytest basadas en las especificaciones del proyecto.
 
 PROYECTO:
 Nombre: {proyecto_nombre}
@@ -24,39 +24,68 @@ REGLAS DE FORMATO ESTRICTAS:
 - Todos los valores de "accion" y "resultado_esperado" deben ser strings simples sin caracteres especiales que rompan el JSON
 - En el campo "accion", usa solo comillas simples dentro del codigo Python
 
+=== FILOSOFÍA TDD — LEE ESTO ANTES DE GENERAR ===
+
+Estas pruebas se escriben ANTES de que exista el sistema real. Siguen TDD:
+1. La prueba define el CONTRATO completo del sistema: qué flujos deben existir, cómo
+   responden ante distintos escenarios, qué estado queda después de cada operación
+2. El desarrollador implementa el sistema real que haga pasar esa prueba
+
+Por eso cada prueba define inline un sistema completo simulado que encapsula todas las
+capas (sin separar Controlador/Servicio/Repositorio). Este sistema inline representa el
+comportamiento esperado del sistema real desde la perspectiva del usuario final.
+NO hay mocks internos — todo el comportamiento se define explícitamente.
+
 === QUÉ SON PRUEBAS DE SISTEMA ===
 
-Las pruebas de sistema validan el comportamiento completo del sistema desde la perspectiva del usuario final. Se enfocan en:
+Las pruebas de sistema validan el comportamiento completo desde la perspectiva del usuario final:
 - Flujos end-to-end completos que cubren casos de uso enteros
-- Comportamiento del sistema como un todo integrado
-- Validacion de requisitos funcionales completos
-- Escenarios de usuario reales y casos de negocio
-- Reglas de negocio complejas que involucran multiples subsistemas
+- Estado del sistema antes Y después de cada operación
+- Reglas de negocio complejas que involucran múltiples subsistemas
+- Escenarios reales de usuario incluyendo flujos alternativos y de error
 
 === REGLAS PARA GENERAR PRUEBAS DE SISTEMA ===
 
 1. COBERTURA OBLIGATORIA POR FLUJO:
-   - Flujo completo exitoso del caso de uso (happy path)
-   - Flujo con datos limite o especiales
-   - Flujo con errores de negocio (no tecnicos)
-   - Flujos alternativos descritos en casos de uso
-   - Estados del sistema antes y despues del flujo
+   - Flujo completo exitoso del caso de uso (happy path) con verificación de estado final
+   - Flujo con datos inválidos o de borde
+   - Flujo con errores de negocio (no técnicos)
+   - Flujos alternativos descritos en los casos de uso
+   - Estado del sistema antes y después del flujo
 
-2. CODIGO EJECUTABLE REAL en el campo "accion":
-   CORRECTO: "resultado = sistema.ejecutar_flujo({'usuario': 'juan', 'email': 'juan@test.com'})"
-   INCORRECTO: "Ejecutar el flujo de registro de usuario"
+2. CÓDIGO PYTEST AUTOSUFICIENTE — REGLA MÁS IMPORTANTE:
 
-3. NOMENCLATURA:
+   Cada prueba define inline una clase de sistema completa que simula el comportamiento
+   esperado. Este sistema inline tiene estado interno (listas, dicts) y métodos que
+   implementan las reglas de negocio. NO hay mocks — el sistema inline es la fuente de
+   verdad del contrato que debe cumplir el sistema real.
+
+   ✅ CORRECTO — sistema completo con estado interno y reglas de negocio:
+   "codigo_pytest": "def test_flujo_registro_usuario_completo_exitoso():\n    from datetime import datetime\n\n    class SistemaUsuarios:\n        def __init__(self):\n            self._usuarios = {}\n            self._emails_registrados = set()\n\n        def registrar_usuario(self, datos):\n            if not datos.get('email') or not datos.get('nombre'):\n                raise ValueError('Email y nombre son obligatorios.')\n            if datos['email'] in self._emails_registrados:\n                raise ValueError('El email ya esta registrado.')\n            usuario_id = len(self._usuarios) + 1\n            usuario = {'id': usuario_id, 'nombre': datos['nombre'], 'email': datos['email'], 'activo': True}\n            self._usuarios[usuario_id] = usuario\n            self._emails_registrados.add(datos['email'])\n            return usuario\n\n        def buscar_por_email(self, email):\n            return next((u for u in self._usuarios.values() if u['email'] == email), None)\n\n        def total_usuarios(self):\n            return len(self._usuarios)\n\n    # Arrange\n    sistema = SistemaUsuarios()\n    assert sistema.total_usuarios() == 0\n\n    # Act\n    usuario_creado = sistema.registrar_usuario({'nombre': 'Juan Perez', 'email': 'juan@test.com'})\n\n    # Assert: verificar respuesta\n    assert usuario_creado['id'] == 1\n    assert usuario_creado['nombre'] == 'Juan Perez'\n    assert usuario_creado['activo'] is True\n\n    # Assert: verificar estado final del sistema\n    assert sistema.total_usuarios() == 1\n    usuario_buscado = sistema.buscar_por_email('juan@test.com')\n    assert usuario_buscado is not None\n    assert usuario_buscado['id'] == 1"
+
+   ❌ INCORRECTO — usa mocks internos, no prueba el sistema como unidad:
+   "codigo_pytest": "def test_flujo():\n    servicio_mock = Mock()\n    servicio_mock.ejecutar.return_value = {'exito': True}\n    assert servicio_mock.ejecutar({})['exito'] == True"
+
+3. ESTRUCTURA INTERNA DEL campo "codigo_pytest":
+
+   La función debe seguir siempre este orden:
+   a) Imports dentro de la función (solo stdlib: datetime, etc.)
+   b) Definición inline de la clase del sistema con estado interno y lógica completa
+   c) Comentario # Arrange: instanciar sistema y verificar estado inicial
+   d) Comentario # Act: ejecutar el flujo del caso de uso
+   e) Comentario # Assert respuesta: verificar lo que retorna el flujo
+   f) Comentario # Assert estado final: verificar que el sistema quedó en estado correcto
+
+4. NOMENCLATURA:
    Formato: test_flujo_[nombre_caso_uso]_[escenario]
    Ejemplos:
-   - test_flujo_registro_usuario_completo_exitoso
-   - test_flujo_autenticacion_con_credenciales_invalidas
+   • test_flujo_registro_usuario_completo_exitoso
+   • test_flujo_autenticacion_credenciales_invalidas_lanza_error
+   • test_flujo_crear_cita_doctor_ocupado_rechaza_solicitud
 
-4. ENFOQUE END-TO-END:
-   Simular TODA la infraestructura externa (DB, servicios externos) pero ejecutar TODO el codigo de la aplicacion sin mocks internos.
-
-5. VERIFICACION DE ESTADO:
-   Siempre verificar el estado ANTES y DESPUES del flujo.
+5. PASOS (para documentación y visualización):
+   Los pasos describen el flujo del caso de uso en lenguaje natural desde la perspectiva del usuario.
+   El código ejecutable completo va en "codigo_pytest", no en los pasos.
 
 === ESTRUCTURA JSON EXACTA A SEGUIR ===
 
@@ -71,46 +100,41 @@ Las pruebas de sistema validan el comportamiento completo del sistema desde la p
         "caso_uso_relacionado": "Nombre del caso de uso o historia de usuario",
         "actores": ["Actor principal", "Actor secundario"],
         "precondiciones": [
-          "Sistema inicializado correctamente",
-          "Actor autenticado con rol apropiado",
-          "Datos base del sistema configurados"
+          "Sistema inicializado en estado limpio",
+          "Datos base necesarios configurados en el sistema"
         ],
         "pasos": [
           {
             "paso": 1,
-            "accion": "estado_inicial = sistema.obtener_estado()",
-            "resultado_esperado": "Estado inicial del sistema verificado"
+            "accion": "Inicializar el sistema y verificar estado inicial vacío",
+            "resultado_esperado": "Sistema listo sin datos previos"
           },
           {
             "paso": 2,
-            "accion": "resultado = sistema.ejecutar({'accion': 'registrar_usuario', 'datos': {'nombre': 'Juan', 'email': 'juan@test.com', 'rol': 'usuario'}})",
+            "accion": "Ejecutar el flujo principal del caso de uso con datos válidos",
             "resultado_esperado": "Flujo ejecutado sin errores"
           },
           {
             "paso": 3,
-            "accion": "assert resultado.get('exito') == True",
-            "resultado_esperado": "Sistema confirma ejecucion exitosa"
+            "accion": "Verificar la respuesta del flujo",
+            "resultado_esperado": "Respuesta confirma éxito con datos correctos"
           },
           {
             "paso": 4,
-            "accion": "estado_final = sistema.obtener_estado(); assert estado_final.get('usuarios_activos') == 1",
-            "resultado_esperado": "Estado del sistema actualizado correctamente"
-          },
-          {
-            "paso": 5,
-            "accion": "usuario_creado = sistema.buscar_usuario('juan@test.com'); assert usuario_creado is not None",
-            "resultado_esperado": "El efecto del flujo es verificable en el sistema"
+            "accion": "Verificar que el estado del sistema refleja los cambios",
+            "resultado_esperado": "Sistema en estado consistente con los efectos esperados"
           }
         ],
+        "codigo_pytest": "def test_flujo_nombre_caso_uso_escenario():\n    class SistemaNombre:\n        def __init__(self):\n            self._datos = {}\n\n        def ejecutar_accion(self, payload):\n            if not payload.get('campo_requerido'):\n                raise ValueError('El campo es obligatorio.')\n            id_nuevo = len(self._datos) + 1\n            registro = {'id': id_nuevo, **payload, 'estado': 'activo'}\n            self._datos[id_nuevo] = registro\n            return registro\n\n        def buscar(self, id_buscar):\n            return self._datos.get(id_buscar)\n\n        def total(self):\n            return len(self._datos)\n\n    # Arrange\n    sistema = SistemaNombre()\n    assert sistema.total() == 0\n\n    # Act\n    resultado = sistema.ejecutar_accion({'campo_requerido': 'valor', 'otro': 123})\n\n    # Assert respuesta\n    assert resultado['id'] == 1\n    assert resultado['estado'] == 'activo'\n    assert resultado['campo_requerido'] == 'valor'\n\n    # Assert estado final\n    assert sistema.total() == 1\n    assert sistema.buscar(1) is not None",
         "datos_prueba": {
-          "entrada": "{'accion': 'registrar_usuario', 'datos': {'nombre': 'Juan Perez', 'email': 'juan@test.com', 'rol': 'usuario', 'activo': True}}",
-          "salida_esperada": "{'exito': True, 'usuario_id': 1, 'mensaje': 'Usuario registrado correctamente'}"
+          "entrada": "{'accion': 'registrar', 'datos': {'nombre': 'Juan Perez', 'email': 'juan@test.com', 'rol': 'usuario', 'activo': True}}",
+          "salida_esperada": "{'exito': True, 'id': 1, 'mensaje': 'Operacion completada correctamente'}"
         },
         "criterios_aceptacion": [
           "El flujo completo se ejecuta sin errores",
           "El estado del sistema es consistente antes y despues",
-          "Los efectos secundarios se producen correctamente",
-          "Los datos persisten correctamente en el sistema"
+          "Los efectos del flujo son verificables en el estado del sistema",
+          "Los datos persisten y son accesibles tras la operación"
         ],
         "postcondiciones": [
           "El sistema queda en estado consistente",
@@ -122,17 +146,29 @@ Las pruebas de sistema validan el comportamiento completo del sistema desde la p
   ]
 }
 
+=== REGLAS CRÍTICAS PARA EL CAMPO codigo_pytest ===
+
+- Es un string donde los saltos de línea se representan como \n
+- NUNCA uses comillas dobles dentro del código Python — usa SOLO comillas simples
+- La función SIEMPRE empieza con "def test_"
+- Todos los imports van DENTRO de la función (solo stdlib, sin dependencias externas)
+- El sistema inline NUNCA usa mocks — todo el comportamiento se implementa explícitamente
+- El sistema debe tener estado interno (listas o dicts) que cambie con las operaciones
+- SIEMPRE verifica el estado del sistema ANTES y DESPUÉS del flujo
+- El código debe poder ejecutarse con "pytest" sin ninguna dependencia externa del proyecto
+
 === CONSIDERACIONES TÉCNICAS ===
 
-- Usar pytest.fixture con scope='session' para el sistema (inicializar una sola vez)
-- Cada prueba debe ser independiente en cuanto a datos
-- Verificar siempre el estado del sistema antes Y despues del flujo
-- Incluir pruebas de los flujos alternativos de los casos de uso
+- Verificar siempre el estado del sistema antes Y después del flujo (assert inicial + assert final)
+- Incluir pruebas de los flujos alternativos de los casos de uso en pruebas separadas
+- Cada prueba debe ser independiente: instanciar el sistema desde cero en cada test
+- Para flujos de error, usar pytest.raises() y verificar el estado no cambió
 
 === CALIDAD ===
 
 - Los flujos deben ser representativos de escenarios de usuario reales
-- Cubrir los casos de uso mas criticos del sistema
-- Verificar efectos secundarios importantes (persistencia, notificaciones, cambios de estado)
+- Cubrir los casos de uso más críticos del sistema
+- La clase del sistema inline debe implementar las reglas de negocio reales, no retornar valores fijos
+- Verificar efectos secundarios importantes: que los datos persisten, que el estado cambia correctamente
 
 GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni despues. Sin comillas dobles dentro de valores de texto.

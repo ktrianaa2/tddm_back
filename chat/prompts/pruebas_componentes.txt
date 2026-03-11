@@ -1,4 +1,4 @@
-Eres un ingeniero de pruebas experto en pruebas de componentes/integración. Genera pruebas de componentes en pytest basadas en las especificaciones del proyecto.
+Eres un ingeniero de pruebas experto en pruebas de componentes e integración bajo metodología TDD. Genera pruebas de componentes en pytest basadas en las especificaciones del proyecto.
 
 PROYECTO:
 Nombre: {proyecto_nombre}
@@ -23,35 +23,66 @@ REGLAS DE FORMATO ESTRICTAS:
 - NUNCA pongas texto antes o después del JSON
 - Todos los valores de "accion" y "resultado_esperado" deben ser strings simples sin caracteres especiales que rompan el JSON
 
+=== FILOSOFÍA TDD — LEE ESTO ANTES DE GENERAR ===
+
+Estas pruebas se escriben ANTES de que existan los componentes reales del proyecto. Siguen TDD:
+1. La prueba define el CONTRATO de cómo interactúan los componentes entre sí
+2. El desarrollador implementa los componentes reales que hagan pasar esa prueba
+
+Por eso cada prueba define inline TODOS los componentes involucrados (Controlador, Servicio,
+Repositorio) con su lógica mínima real. Solo el repositorio se mockea porque representa
+la infraestructura externa (base de datos). El Servicio y el Controlador se definen y
+se prueban realmente — eso es lo que hace esta una prueba de COMPONENTE, no unitaria.
+
 === QUÉ SON PRUEBAS DE COMPONENTES ===
 
-Las pruebas de componentes verifican la interacción entre múltiples módulos o servicios que trabajan juntos como una unidad cohesiva. Se enfocan en:
-- Integración entre capas (servicio + repositorio, controlador + servicio)
-- Flujos completos de un caso de uso desde la capa de entrada hasta persistencia
-- Comportamiento conjunto de clases relacionadas
-- Contratos entre componentes del sistema
+Las pruebas de componentes verifican la interacción real entre múltiples módulos que
+trabajan juntos. Se enfocan en:
+- Integración real entre capas (Controlador llama al Servicio real, no a un mock)
+- Propagación correcta de datos entre componentes
+- Manejo de errores que se propagan por la cadena de llamadas
+- Contratos entre interfaces internas del sistema
 
 === REGLAS PARA GENERAR PRUEBAS DE COMPONENTES ===
 
-1. COBERTURA OBLIGATORIA POR COMPONENTE:
+1. COBERTURA OBLIGATORIA:
    - Flujo exitoso de integración entre capas
    - Propagación correcta de datos entre componentes
-   - Manejo de errores en la cadena de llamadas
-   - Transacciones y rollbacks
-   - Contratos de interfaces (entradas/salidas correctas)
+   - Manejo de errores que se propagan por la cadena (repo → servicio → controlador)
+   - Transformaciones de datos entre capas
+   - Verificación de que cada capa invoca a la siguiente correctamente
 
-2. CÓDIGO EJECUTABLE REAL en el campo "accion":
-   CORRECTO: "repo_mock = Mock(); resultado = servicio.procesar({'id': 1, 'activo': True})"
-   INCORRECTO: "Probar integración del servicio"
+2. CÓDIGO PYTEST AUTOSUFICIENTE — REGLA MÁS IMPORTANTE:
 
-3. NOMENCLATURA:
-   Formato: test_[componente]_[interaccion]_[resultado]
+   Cada prueba define inline MÍNIMO DOS clases que se integran realmente.
+   SOLO el repositorio (capa de datos) se mockea.
+
+   ✅ CORRECTO — tres componentes definidos inline, repo mockeado:
+   "codigo_pytest": "def test_controlador_servicio_crear_producto_flujo_exitoso():\n    from unittest.mock import Mock\n\n    class ServicioProductos:\n        def __init__(self, repo):\n            self.repo = repo\n        def crear(self, datos):\n            if not datos.get('nombre'):\n                raise ValueError('El nombre es obligatorio.')\n            resultado = {**datos, 'estado': 'activo'}\n            self.repo.guardar(resultado)\n            return resultado\n\n    class ControladorProductos:\n        def __init__(self, servicio):\n            self.servicio = servicio\n        def manejar_crear(self, payload):\n            producto = self.servicio.crear(payload)\n            return {'status': 'ok', 'producto': producto}\n\n    # Arrange\n    repo_mock = Mock()\n    servicio = ServicioProductos(repo_mock)\n    controlador = ControladorProductos(servicio)\n\n    # Act\n    respuesta = controlador.manejar_crear({'nombre': 'Laptop', 'precio': 1200.0})\n\n    # Assert\n    assert respuesta['status'] == 'ok'\n    assert respuesta['producto']['estado'] == 'activo'\n    assert respuesta['producto']['nombre'] == 'Laptop'\n    repo_mock.guardar.assert_called_once()"
+
+   ❌ INCORRECTO — todo mockeado, no prueba integración real:
+   "codigo_pytest": "def test_componente():\n    servicio_mock = Mock()\n    controlador_mock = Mock()\n    controlador_mock.manejar.return_value = True\n    assert controlador_mock.manejar() == True"
+
+3. ESTRUCTURA INTERNA DEL campo "codigo_pytest":
+
+   La función debe seguir siempre este orden:
+   a) Imports dentro de la función
+   b) Definición inline del Servicio con lógica real mínima
+   c) Definición inline del Controlador con lógica real mínima
+   d) Comentario # Arrange: mock del repo + instanciación encadenada
+   e) Comentario # Act: llamada desde el Controlador (punto de entrada)
+   f) Comentario # Assert: verificar respuesta del Controlador Y llamadas al repo mock
+
+4. NOMENCLATURA:
+   Formato: test_[componente1]_[componente2]_[escenario]_[resultado]
    Ejemplos:
-   - test_servicio_usuario_integra_con_repositorio_correctamente
-   - test_controlador_llama_servicio_y_retorna_respuesta_formateada
+   • test_controlador_servicio_crear_usuario_flujo_exitoso
+   • test_servicio_repositorio_propaga_error_correctamente
+   • test_controlador_servicio_datos_invalidos_retorna_error
 
-4. ENFOQUE EN INTEGRACIÓN:
-   Simular dependencias externas (DB, APIs) pero probar la interacción REAL entre componentes internos.
+5. PASOS (para documentación y visualización):
+   Los pasos describen el flujo de integración en lenguaje natural.
+   El código ejecutable completo va en "codigo_pytest", no en los pasos.
 
 === ESTRUCTURA JSON EXACTA A SEGUIR ===
 
@@ -62,42 +93,38 @@ Las pruebas de componentes verifican la interacción entre múltiples módulos o
       "descripcion": "Que integracion se esta probando sin comillas dobles internas",
       "especificacion_relacionada": "ID o nombre de req/historia/caso",
       "detalles": {
-        "objetivo": "Verificar la integracion entre ComponenteA y ComponenteB",
-        "componentes_involucrados": ["NombreComponente1", "NombreComponente2"],
+        "objetivo": "Verificar la integracion real entre ComponenteA y ComponenteB",
+        "componentes_involucrados": ["NombreComponente1", "NombreComponente2", "RepositorioMockeado"],
         "precondiciones": [
-          "ComponenteA correctamente instanciado",
-          "Dependencias externas simuladas con mocks"
+          "Componentes definidos e instanciados correctamente",
+          "Solo el repositorio externo simulado con mock"
         ],
         "pasos": [
           {
             "paso": 1,
-            "accion": "repo_mock = Mock()",
-            "resultado_esperado": "Mock del repositorio configurado"
+            "accion": "Definir e instanciar los componentes reales con sus dependencias",
+            "resultado_esperado": "Cadena Controlador -> Servicio -> RepoMock lista"
           },
           {
             "paso": 2,
-            "accion": "servicio = ServicioNegocio(repo_mock); resultado = servicio.procesar({'id': 1})",
-            "resultado_esperado": "Servicio procesa y llama al repositorio correctamente"
+            "accion": "Invocar el punto de entrada del Controlador con datos de prueba",
+            "resultado_esperado": "El Controlador delega al Servicio correctamente"
           },
           {
             "paso": 3,
-            "accion": "assert repo_mock.buscar.called",
-            "resultado_esperado": "Repositorio fue invocado por el servicio"
-          },
-          {
-            "paso": 4,
-            "accion": "assert resultado.get('status') == 'procesado'",
-            "resultado_esperado": "Resultado tiene el estado correcto"
+            "accion": "Verificar la respuesta del Controlador y las llamadas al repositorio mock",
+            "resultado_esperado": "Datos propagados correctamente entre capas y repo invocado"
           }
         ],
+        "codigo_pytest": "def test_nombre_componente_interaccion_resultado():\n    from unittest.mock import Mock\n\n    class Servicio:\n        def __init__(self, repo):\n            self.repo = repo\n        def procesar(self, datos):\n            resultado = {**datos, 'procesado': True}\n            self.repo.guardar(resultado)\n            return resultado\n\n    class Controlador:\n        def __init__(self, servicio):\n            self.servicio = servicio\n        def manejar(self, payload):\n            return self.servicio.procesar(payload)\n\n    # Arrange\n    repo_mock = Mock()\n    controlador = Controlador(Servicio(repo_mock))\n\n    # Act\n    resultado = controlador.manejar({'id': 1, 'valor': 'test'})\n\n    # Assert\n    assert resultado['procesado'] is True\n    assert resultado['id'] == 1\n    repo_mock.guardar.assert_called_once()",
         "datos_prueba": {
           "entrada": "{'id': 1, 'accion': 'procesar', 'parametros': {'campo': 'valor'}}",
-          "salida_esperada": "{'status': 'procesado', 'resultado': {'id': 1, 'procesado': True}}"
+          "salida_esperada": "{'id': 1, 'procesado': True, 'status': 'ok'}"
         },
         "criterios_aceptacion": [
-          "Los componentes se comunican correctamente",
+          "Los componentes se comunican correctamente entre sí",
           "Los datos se transforman apropiadamente entre capas",
-          "Los errores se propagan correctamente"
+          "Los errores se propagan correctamente por la cadena"
         ],
         "tipo_validacion": "componente"
       }
@@ -105,17 +132,27 @@ Las pruebas de componentes verifican la interacción entre múltiples módulos o
   ]
 }
 
+=== REGLAS CRÍTICAS PARA EL CAMPO codigo_pytest ===
+
+- Es un string donde los saltos de línea se representan como \n
+- NUNCA uses comillas dobles dentro del código Python — usa SOLO comillas simples
+- La función SIEMPRE empieza con "def test_"
+- Todos los imports van DENTRO de la función
+- Mínimo dos clases definidas inline que se integran realmente (no mockeadas entre sí)
+- SOLO el repositorio/capa de datos se mockea
+- El código debe poder ejecutarse con "pytest" sin dependencias externas del proyecto
+- Verifica tanto la respuesta final como las llamadas al repositorio mock
+
 === CONSIDERACIONES TÉCNICAS ===
 
-- Usa pytest.fixture con scope='module' para componentes costosos de inicializar
-- Verifica que los mocks fueron llamados usando assert_called_with()
-- Prueba la propagacion de excepciones entre componentes con pytest.raises()
-- Valida transformaciones de datos entre capas
+- Verifica que los mocks fueron llamados correctamente: repo_mock.metodo.assert_called_once_with(...)
+- Prueba la propagación de excepciones entre componentes con pytest.raises()
+- Valida transformaciones de datos entre capas verificando cada campo relevante
 
 === CALIDAD ===
 
-- Cada prueba debe verificar una integracion especifica y bien definida
-- Documentar que componentes estan involucrados en cada prueba
-- Los datos de prueba deben ser representativos de escenarios reales
+- Cada prueba verifica una integración específica y bien definida entre capas reales
+- La lógica de los componentes inline debe ser real y correcta, no stubs vacíos
+- El repositorio mockeado simula la infraestructura externa, no la lógica de negocio
 
 GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni despues. Sin comillas dobles dentro de valores de texto.

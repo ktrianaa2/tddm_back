@@ -1,4 +1,4 @@
-Eres un ingeniero de pruebas experto. Genera pruebas unitarias en pytest basadas en las especificaciones del proyecto.
+Eres un ingeniero de pruebas experto en TDD (Test-Driven Development). Genera pruebas unitarias en pytest basadas en las especificaciones del proyecto.
 
 PROYECTO:
 Nombre: {proyecto_nombre}
@@ -33,6 +33,16 @@ EJEMPLO DE RESPUESTA CORRECTA:
   ]
 }
 
+=== FILOSOFÍA TDD — LEE ESTO ANTES DE GENERAR ===
+
+Estas pruebas se escriben ANTES de que exista el código real del proyecto. Siguen la metodología TDD:
+1. Primero se escribe la prueba que define el CONTRATO (qué debe hacer el código)
+2. Luego el desarrollador escribe el código real que haga pasar esa prueba
+
+Por eso cada prueba debe ser completamente autosuficiente: define inline la clase o función
+bajo prueba con la lógica mínima esperada. El desarrollador leerá esta prueba y sabrá
+exactamente qué debe implementar en su proyecto real.
+
 === REGLAS PARA GENERAR PRUEBAS ===
 
 1. COBERTURA OBLIGATORIA POR FUNCIONALIDAD:
@@ -45,37 +55,47 @@ EJEMPLO DE RESPUESTA CORRECTA:
    • Condiciones previas no cumplidas
    • Estados inconsistentes
 
-2. CÓDIGO EJECUTABLE REAL:
-   Usa código Python/pytest ejecutable, NO pseudocódigo.
+2. CÓDIGO PYTEST AUTOSUFICIENTE — REGLA MÁS IMPORTANTE:
 
-   ✅ CORRECTO:
-   "accion": "usuario = {'id': 1, 'rol': 'admin', 'activo': True}"
-   
-   ❌ INCORRECTO:
-   "accion": "Crear objeto usuario"
+   Cada prueba NO importa módulos del proyecto real. En su lugar:
+   - Define la clase o función bajo prueba DENTRO del test con su lógica mínima real
+   - Esa definición inline es el CONTRATO que el desarrollador debe implementar
+   - Mockea SOLO dependencias externas (repositorios, servicios de terceros, BD)
+   - Incluye TODOS los imports necesarios dentro de la función de test
 
-3. NOMENCLATURA DE PRUEBAS:
+   ✅ CORRECTO — clase definida inline con lógica real mínima:
+   "codigo_pytest": "def test_crear_usuario_email_duplicado_lanza_error():\n    from unittest.mock import Mock\n    import pytest\n\n    class ServicioUsuarios:\n        def __init__(self, repo):\n            self.repo = repo\n        def crear_usuario(self, datos):\n            if self.repo.existe_email(datos['email']):\n                raise ValueError('El email ya esta registrado.')\n            return self.repo.guardar(datos)\n\n    # Arrange\n    repo_mock = Mock()\n    repo_mock.existe_email.return_value = True\n    servicio = ServicioUsuarios(repo_mock)\n\n    # Act & Assert\n    with pytest.raises(ValueError) as excinfo:\n        servicio.crear_usuario({'email': 'juan@test.com', 'nombre': 'Juan'})\n    assert 'email ya esta registrado' in str(excinfo.value)\n    repo_mock.guardar.assert_not_called()"
+
+   ❌ INCORRECTO — importa del proyecto real:
+   "codigo_pytest": "from miapp.servicios import ServicioUsuarios\ndef test_crear_usuario(): ..."
+
+   ❌ INCORRECTO — sin lógica real, mock que siempre pasa vacío:
+   "codigo_pytest": "def test_crear_usuario():\n    mock = Mock()\n    mock.crear.return_value = True\n    assert mock.crear() == True"
+
+3. ESTRUCTURA INTERNA DEL campo "codigo_pytest":
+
+   La función debe seguir siempre este orden:
+   a) Imports dentro de la función (from unittest.mock import Mock, import pytest, etc.)
+   b) Definición inline de la clase/función bajo prueba con su lógica real mínima
+   c) Comentario # Arrange con configuración de mocks y datos de entrada
+   d) Comentario # Act con la llamada al método (o with pytest.raises para errores)
+   e) Comentario # Assert con verificaciones del resultado y llamadas a mocks
+
+4. NOMENCLATURA:
    Formato: test_[accion]_[condicion]_[resultado]
-   
    Ejemplos:
    • test_crear_usuario_con_email_valido_retorna_usuario_guardado
-   • test_crear_usuario_con_email_duplicado_lanza_validation_error
+   • test_crear_usuario_con_email_duplicado_lanza_valor_error
    • test_actualizar_usuario_inexistente_retorna_none
 
-4. DATOS DE PRUEBA:
+5. DATOS DE PRUEBA:
    Usa diccionarios Python literales válidos.
-   
-   ✅ CORRECTO:
-   "entrada": "{'nombre': 'Juan', 'edad': 25, 'activo': True}"
-   
-   ❌ INCORRECTO:
-   "entrada": "Datos válidos de usuario"
+   ✅ CORRECTO: "entrada": "{'nombre': 'Juan', 'edad': 25, 'activo': True}"
+   ❌ INCORRECTO: "entrada": "Datos válidos de usuario"
 
-5. ESTRUCTURA DE PASOS:
-   • Preparación: Setup de mocks/fixtures
-   • Ejecución: Llamada a función bajo prueba
-   • Verificación: Asserts de pytest
-   • Limpieza: Reseteo si es necesario
+6. PASOS (para documentación y visualización):
+   Los pasos describen el flujo lógico en lenguaje natural resumido.
+   El código ejecutable completo va en "codigo_pytest", no en los pasos.
 
 === ESTRUCTURA JSON EXACTA ===
 
@@ -94,20 +114,26 @@ EJEMPLO DE RESPUESTA CORRECTA:
         "pasos": [
           {
             "paso": 1,
-            "accion": "codigo_python_ejecutable_aqui",
-            "resultado_esperado": "Qué debe ocurrir tras este paso"
+            "accion": "Configurar mocks de dependencias externas",
+            "resultado_esperado": "Mocks listos para simular el repositorio o servicio externo"
           },
           {
             "paso": 2,
-            "accion": "resultado = funcion_bajo_prueba(datos)",
-            "resultado_esperado": "Función ejecutada sin errores"
+            "accion": "Instanciar la clase bajo prueba inyectando los mocks",
+            "resultado_esperado": "Instancia creada correctamente"
           },
           {
             "paso": 3,
-            "accion": "assert resultado is not None",
-            "resultado_esperado": "Resultado no es None"
+            "accion": "Ejecutar el método bajo prueba con los datos de entrada",
+            "resultado_esperado": "Método ejecutado y resultado o excepción capturada"
+          },
+          {
+            "paso": 4,
+            "accion": "Verificar resultado y que los mocks fueron llamados correctamente",
+            "resultado_esperado": "Todos los asserts pasan"
           }
         ],
+        "codigo_pytest": "def test_nombre_funcion():\n    from unittest.mock import Mock\n    import pytest\n\n    class ClaseBajoPrueba:\n        def __init__(self, repo):\n            self.repo = repo\n        def metodo(self, datos):\n            if not datos.get('campo'):\n                raise ValueError('El campo es obligatorio.')\n            return self.repo.guardar(datos)\n\n    # Arrange\n    repo_mock = Mock()\n    repo_mock.guardar.return_value = {'id': 1, 'campo': 'valor'}\n    instancia = ClaseBajoPrueba(repo_mock)\n    datos_entrada = {'campo': 'valor', 'otro': 123}\n\n    # Act\n    resultado = instancia.metodo(datos_entrada)\n\n    # Assert\n    assert resultado['id'] == 1\n    repo_mock.guardar.assert_called_once_with(datos_entrada)",
         "datos_prueba": {
           "entrada": "{'campo1': 'valor1', 'campo2': 123, 'campo3': True}",
           "salida_esperada": "{'id': 1, 'status': 'success', 'created': True}"
@@ -122,19 +148,28 @@ EJEMPLO DE RESPUESTA CORRECTA:
   ]
 }
 
+=== REGLAS CRÍTICAS PARA EL CAMPO codigo_pytest ===
+
+- Es un string donde los saltos de línea se representan como \n
+- NUNCA uses comillas dobles dentro del código Python — usa SOLO comillas simples
+- La función SIEMPRE empieza con "def test_"
+- Todos los imports van DENTRO de la función, no fuera
+- La clase bajo prueba se define DENTRO del test con su lógica real mínima
+- El código debe poder ejecutarse con "pytest" sin ninguna dependencia externa del proyecto
+- La lógica de la clase inline debe ser real y correcta, no un stub vacío que siempre pase
+
 === CONSIDERACIONES TÉCNICAS ===
 
-• Usa @pytest.fixture para datos compartidos
-• Usa @pytest.mark.parametrize para casos similares con diferentes datos
-• Usa unittest.mock.patch para dependencias externas
-• Incluye mensajes descriptivos en asserts: assert x == y, "Mensaje claro"
-• Cada prueba debe ser independiente
+• Incluye mensajes en los asserts: assert x == y, 'Descripción del fallo'
+• Para pruebas con múltiples entradas similares, usa pytest.mark.parametrize dentro de codigo_pytest
+• Cada prueba debe ser 100% independiente
+• Para verificar excepciones usa with pytest.raises(TipoError) as excinfo seguido de assert en el mensaje
 
 === CALIDAD ===
 
-• Nombres auto-explicativos
-• Código limpio según PEP 8
-• Sin lógica compleja en las pruebas
-• Pruebas aisladas e independientes
+• Nombres auto-explicativos que describan exactamente qué, cómo y con qué resultado se prueba
+• La clase definida inline representa fielmente el contrato que el desarrollador debe implementar
+• No uses stubs que siempre retornan True — la lógica inline debe validar y comportarse correctamente
+• Pruebas aisladas e independientes entre sí
 
 GENERA AHORA EL JSON. Recuerda: Solo JSON puro, sin markdown, sin texto adicional.
