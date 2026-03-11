@@ -394,7 +394,7 @@ def _guardar_pruebas_en_bd(proyecto, tipo_prueba_nombre, pruebas_json):
             # en lugar de serializarlo a string con json.dumps().
             # Esto evita que el campo quede como string (doble-encoded) en la BD,
             # lo que causaba que al leerlo y re-guardarlo se alterara el formato.
-            prueba_json_obj = detalles_completos  # dict, no string
+            prueba_json_obj = json.dumps(detalles_completos, ensure_ascii=False)
 
             # ── especificacion_relacionada ─────────────────────────────
             especificacion_relacionada = _to_str(
@@ -415,7 +415,7 @@ def _guardar_pruebas_en_bd(proyecto, tipo_prueba_nombre, pruebas_json):
                 descripcion=descripcion,
                 estado='Pendiente',
                 especificacion_relacionada=especificacion_relacionada,
-                prueba=prueba_json_obj,  # FIX: dict directo, nunca string
+                prueba=prueba_json_obj,
                 activo=True
             )
 
