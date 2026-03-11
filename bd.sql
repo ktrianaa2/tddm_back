@@ -121,6 +121,30 @@ CREATE TABLE usuarios (
 );
 
 -- ============================================
+-- NUEVA TABLA: CONEXIONES GITHUB
+-- Depende de usuarios (nivel 1)
+-- ============================================
+
+CREATE TABLE github_conexiones (
+    id SERIAL PRIMARY KEY,
+    -- Referencia lógica al usuario (sin FK formal para evitar dependencia circular con Django)
+    usuario_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id) ON DELETE CASCADE,
+    -- Token GitHub encriptado con Fernet (nunca en texto plano)
+    token_encriptado TEXT NOT NULL,
+    -- Metadatos públicos del perfil GitHub
+    github_usuario VARCHAR(100) NOT NULL,
+    github_avatar VARCHAR(500) DEFAULT '',
+    -- Auditoría
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN DEFAULT TRUE
+);
+
+-- Índice para búsquedas rápidas por usuario
+CREATE INDEX idx_github_conexiones_usuario_id ON github_conexiones(usuario_id);
+
+
+-- ============================================
 -- TABLAS CON DEPENDENCIAS NIVEL 2
 -- ============================================
 

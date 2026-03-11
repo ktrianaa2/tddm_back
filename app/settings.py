@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from dotenv import load_dotenv
 import os
 
+GITHUB_TOKEN_KEY = os.environ.get('GITHUB_TOKEN_KEY', '')
+
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -57,6 +59,7 @@ INSTALLED_APPS = [
     'catalogos',
     'pruebas',
     'esquemas_bd',
+    'github_integration',
 ]
 
 MIDDLEWARE = [

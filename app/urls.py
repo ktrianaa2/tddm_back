@@ -28,4 +28,5 @@ urlpatterns = [
     path("app/chat/", include("chat.urls")),
     path("app/pruebas/", include("pruebas.urls")),
     path("app/esquemas-bd/", include("esquemas_bd.urls")),
+    path('app/github/', include('github_integration.urls')),
 ]
