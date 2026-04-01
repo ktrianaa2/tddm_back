@@ -456,7 +456,7 @@ def _generar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
 
         prompt = _cargar_prompt_por_tipo(especificaciones, tipo_prueba)
 
-        print(f"[DEBUG] Llamando a Gemini API para pruebas de {tipo_prueba}...")
+        print(f"[DEBUG] Llamando a API para pruebas de {tipo_prueba}...")
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=[prompt]

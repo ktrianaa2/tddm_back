@@ -21,124 +21,146 @@ REGLAS DE FORMATO ESTRICTAS:
 - NUNCA uses comillas dobles DENTRO de un valor de texto. Usa comillas simples en su lugar
 - NUNCA uses bloques markdown como ```python o ```
 - NUNCA pongas texto antes o después del JSON
-- Todos los valores de "accion" y "resultado_esperado" deben ser strings simples sin caracteres especiales que rompan el JSON
-- En el campo "accion", usa solo comillas simples dentro del codigo Python
 
-=== FILOSOFÍA TDD — LEE ESTO ANTES DE GENERAR ===
+=== FILOSOFÍA TDD REAL — LEE ESTO ANTES DE GENERAR ===
 
-Estas pruebas se escriben ANTES de que exista el sistema real. Siguen TDD:
-1. La prueba define el CONTRATO completo del sistema: qué flujos deben existir, cómo
-   responden ante distintos escenarios, qué estado queda después de cada operación
-2. El desarrollador implementa el sistema real que haga pasar esa prueba
+En TDD real el ciclo es:
+  🔴 RED:    La prueba importa el sistema real del proyecto. FALLA porque no existe.
+  🟢 GREEN:  El desarrollador implementa el sistema real. La prueba PASA.
+  🔵 REFACTOR: El desarrollador limpia el código. La prueba sigue pasando.
 
-Por eso cada prueba define inline un sistema completo simulado que encapsula todas las
-capas (sin separar Controlador/Servicio/Repositorio). Este sistema inline representa el
-comportamiento esperado del sistema real desde la perspectiva del usuario final.
-NO hay mocks internos — todo el comportamiento se define explícitamente.
+Una prueba de sistema valida el comportamiento completo desde la perspectiva del usuario:
+flujos end-to-end reales, estado del sistema antes y después, reglas de negocio complejas.
 
-=== QUÉ SON PRUEBAS DE SISTEMA ===
+Si el sistema se define inline dentro del test, la prueba se está probando a sí misma
+y siempre pasará. Eso no es TDD de sistema.
 
-Las pruebas de sistema validan el comportamiento completo desde la perspectiva del usuario final:
-- Flujos end-to-end completos que cubren casos de uso enteros
-- Estado del sistema antes Y después de cada operación
-- Reglas de negocio complejas que involucran múltiples subsistemas
-- Escenarios reales de usuario incluyendo flujos alternativos y de error
+Por lo tanto:
+
+  ✅ codigo_pytest → importa el sistema/fachada REAL desde el proyecto.
+                     FALLARÁ en rojo porque ese módulo aún no existe.
+
+  ✅ codigo_implementacion → el contrato mínimo del sistema que el desarrollador
+                              debe crear en su proyecto para que la prueba pase.
+
+=== QUÉ ES EL PUNTO DE ENTRADA DEL SISTEMA ===
+
+Para pruebas de sistema se importa una clase de "fachada" o "aplicación" que encapsula
+todas las capas del sistema. Esta clase expone los casos de uso como métodos públicos
+y maneja internamente el estado.
+
+El desarrollador decide cómo implementar esas capas internas — la prueba solo verifica
+el comportamiento observable desde afuera (inputs, outputs, estado).
+
+=== CÓMO INFERIR EL MÓDULO DE IMPORTACIÓN ===
+
+Infiere una fachada de aplicación realista a partir del nombre del proyecto.
+
+Ejemplos:
+  Proyecto "Sistema de Citas Médicas"   → from citas.aplicacion import AplicacionCitas
+  Proyecto "Gestión de Inventario"      → from inventario.aplicacion import AplicacionInventario
+  Proyecto "E-commerce"                 → from tienda.aplicacion import AplicacionTienda
+
+La clase de aplicación recibe en su constructor los repositorios o dependencias externas
+que el desarrollador implementará. En la prueba, esas dependencias se mockean.
 
 === REGLAS PARA GENERAR PRUEBAS DE SISTEMA ===
 
 1. COBERTURA OBLIGATORIA POR FLUJO:
-   - Flujo completo exitoso del caso de uso (happy path) con verificación de estado final
+   - Flujo completo exitoso (happy path) con verificación de estado final
    - Flujo con datos inválidos o de borde
-   - Flujo con errores de negocio (no técnicos)
-   - Flujos alternativos descritos en los casos de uso
-   - Estado del sistema antes y después del flujo
+   - Flujo con errores de negocio
+   - Flujos alternativos relevantes del caso de uso
+   - Verificación del estado del sistema antes Y después del flujo
 
-2. CÓDIGO PYTEST AUTOSUFICIENTE — REGLA MÁS IMPORTANTE:
+2. CÓDIGO PYTEST — REGLA MÁS IMPORTANTE:
 
-   Cada prueba define inline una clase de sistema completa que simula el comportamiento
-   esperado. Este sistema inline tiene estado interno (listas, dicts) y métodos que
-   implementan las reglas de negocio. NO hay mocks — el sistema inline es la fuente de
-   verdad del contrato que debe cumplir el sistema real.
+   Importa la clase de aplicación REAL. Mockea solo los repositorios externos.
+   Verifica tanto la respuesta del flujo como el estado resultante del sistema
+   a través de métodos de consulta de la misma aplicación.
 
-   ✅ CORRECTO — sistema completo con estado interno y reglas de negocio:
-   "codigo_pytest": "def test_flujo_registro_usuario_completo_exitoso():\n    from datetime import datetime\n\n    class SistemaUsuarios:\n        def __init__(self):\n            self._usuarios = {}\n            self._emails_registrados = set()\n\n        def registrar_usuario(self, datos):\n            if not datos.get('email') or not datos.get('nombre'):\n                raise ValueError('Email y nombre son obligatorios.')\n            if datos['email'] in self._emails_registrados:\n                raise ValueError('El email ya esta registrado.')\n            usuario_id = len(self._usuarios) + 1\n            usuario = {'id': usuario_id, 'nombre': datos['nombre'], 'email': datos['email'], 'activo': True}\n            self._usuarios[usuario_id] = usuario\n            self._emails_registrados.add(datos['email'])\n            return usuario\n\n        def buscar_por_email(self, email):\n            return next((u for u in self._usuarios.values() if u['email'] == email), None)\n\n        def total_usuarios(self):\n            return len(self._usuarios)\n\n    # Arrange\n    sistema = SistemaUsuarios()\n    assert sistema.total_usuarios() == 0\n\n    # Act\n    usuario_creado = sistema.registrar_usuario({'nombre': 'Juan Perez', 'email': 'juan@test.com'})\n\n    # Assert: verificar respuesta\n    assert usuario_creado['id'] == 1\n    assert usuario_creado['nombre'] == 'Juan Perez'\n    assert usuario_creado['activo'] is True\n\n    # Assert: verificar estado final del sistema\n    assert sistema.total_usuarios() == 1\n    usuario_buscado = sistema.buscar_por_email('juan@test.com')\n    assert usuario_buscado is not None\n    assert usuario_buscado['id'] == 1"
+   ✅ CORRECTO:
+   "codigo_pytest": "def test_flujo_crear_cita_paciente_valido_exitoso():\n    from unittest.mock import Mock\n    from citas.aplicacion import AplicacionCitas\n\n    # Arrange\n    repo_citas_mock = Mock()\n    repo_pacientes_mock = Mock()\n    repo_pacientes_mock.buscar.return_value = {'id': 1, 'nombre': 'Ana Lopez', 'activo': True}\n    repo_citas_mock.guardar.return_value = {'id': 42, 'paciente_id': 1, 'fecha': '2024-06-15', 'estado': 'pendiente'}\n    repo_citas_mock.buscar_por_id.return_value = {'id': 42, 'paciente_id': 1, 'fecha': '2024-06-15', 'estado': 'pendiente'}\n    app = AplicacionCitas(repo_citas=repo_citas_mock, repo_pacientes=repo_pacientes_mock)\n\n    # Act\n    resultado = app.crear_cita({'paciente_id': 1, 'fecha': '2024-06-15', 'motivo': 'Consulta general'})\n\n    # Assert respuesta del flujo\n    assert resultado['exito'] is True\n    assert resultado['cita']['id'] == 42\n    assert resultado['cita']['estado'] == 'pendiente'\n\n    # Assert estado del sistema (via consulta)\n    repo_pacientes_mock.buscar.assert_called_once_with(1)\n    repo_citas_mock.guardar.assert_called_once()"
 
-   ❌ INCORRECTO — usa mocks internos, no prueba el sistema como unidad:
-   "codigo_pytest": "def test_flujo():\n    servicio_mock = Mock()\n    servicio_mock.ejecutar.return_value = {'exito': True}\n    assert servicio_mock.ejecutar({})['exito'] == True"
+   ❌ INCORRECTO — sistema definido inline (siempre pasa, no es TDD):
+   "codigo_pytest": "def test_flujo():\n    class AplicacionCitas:\n        def __init__(self): self._citas = {}\n        def crear_cita(self, datos): return {'exito': True, 'cita': datos}\n    app = AplicacionCitas()\n    assert app.crear_cita({'paciente_id': 1})['exito'] == True"
 
-3. ESTRUCTURA INTERNA DEL campo "codigo_pytest":
+3. CAMPO codigo_implementacion — CONTRATO PARA EL DESARROLLADOR:
 
-   La función debe seguir siempre este orden:
-   a) Imports dentro de la función (solo stdlib: datetime, etc.)
-   b) Definición inline de la clase del sistema con estado interno y lógica completa
-   c) Comentario # Arrange: instanciar sistema y verificar estado inicial
-   d) Comentario # Act: ejecutar el flujo del caso de uso
-   e) Comentario # Assert respuesta: verificar lo que retorna el flujo
-   f) Comentario # Assert estado final: verificar que el sistema quedó en estado correcto
+   Incluye la clase de aplicación mínima que el desarrollador debe crear.
+   Describe qué métodos públicos expone y qué dependencias recibe.
+
+   ✅ CORRECTO:
+   "codigo_implementacion": "# Archivo: citas/aplicacion.py\n\nclass AplicacionCitas:\n    def __init__(self, repo_citas, repo_pacientes):\n        self.repo_citas = repo_citas\n        self.repo_pacientes = repo_pacientes\n\n    def crear_cita(self, datos):\n        paciente = self.repo_pacientes.buscar(datos['paciente_id'])\n        if paciente is None:\n            return {'exito': False, 'error': 'Paciente no encontrado'}\n        if not paciente.get('activo'):\n            return {'exito': False, 'error': 'Paciente inactivo'}\n        cita = self.repo_citas.guardar(datos)\n        return {'exito': True, 'cita': cita}"
 
 4. NOMENCLATURA:
    Formato: test_flujo_[nombre_caso_uso]_[escenario]
    Ejemplos:
-   • test_flujo_registro_usuario_completo_exitoso
-   • test_flujo_autenticacion_credenciales_invalidas_lanza_error
-   • test_flujo_crear_cita_doctor_ocupado_rechaza_solicitud
+   - test_flujo_crear_cita_paciente_valido_exitoso
+   - test_flujo_crear_cita_paciente_inexistente_retorna_error
+   - test_flujo_crear_cita_fecha_pasada_rechaza_solicitud
 
-5. PASOS (para documentación y visualización):
-   Los pasos describen el flujo del caso de uso en lenguaje natural desde la perspectiva del usuario.
-   El código ejecutable completo va en "codigo_pytest", no en los pasos.
+5. ESTRUCTURA INTERNA DEL campo codigo_pytest:
+   a) Imports: unittest.mock, pytest si aplica, import de la clase de aplicación real
+   b) # Arrange: mocks de repos con comportamiento específico + instanciación de la app
+   c) # Act: ejecutar el flujo del caso de uso
+   d) # Assert respuesta del flujo: verificar el resultado devuelto
+   e) # Assert estado del sistema: verificar que los repos fueron llamados correctamente
 
-=== ESTRUCTURA JSON EXACTA A SEGUIR ===
+=== ESTRUCTURA JSON EXACTA ===
 
 {
   "pruebas": [
     {
       "nombre": "test_flujo_nombre_caso_uso_escenario",
-      "descripcion": "Flujo completo del caso de uso desde inicio hasta fin sin comillas dobles internas",
+      "descripcion": "Flujo completo del caso de uso desde inicio hasta fin (sin comillas dobles internas)",
       "especificacion_relacionada": "ID o nombre de req/historia/caso",
       "detalles": {
-        "objetivo": "Verificar el flujo completo del caso de uso indicado",
+        "objetivo": "Verificar el flujo completo de [caso de uso] cuando [condicion]",
         "caso_uso_relacionado": "Nombre del caso de uso o historia de usuario",
-        "actores": ["Actor principal", "Actor secundario"],
+        "actores": ["Actor principal"],
+        "modulo_importacion": "from paquete.aplicacion import AplicacionX",
         "precondiciones": [
-          "Sistema inicializado en estado limpio",
-          "Datos base necesarios configurados en el sistema"
+          "El módulo paquete/aplicacion.py debe existir con AplicacionX",
+          "AplicacionX debe aceptar los repositorios como dependencias en el constructor"
         ],
         "pasos": [
           {
             "paso": 1,
-            "accion": "Inicializar el sistema y verificar estado inicial vacío",
-            "resultado_esperado": "Sistema listo sin datos previos"
+            "accion": "Configurar mocks de repositorios con el estado inicial del escenario",
+            "resultado_esperado": "Repositorios listos simulando el estado de la BD"
           },
           {
             "paso": 2,
-            "accion": "Ejecutar el flujo principal del caso de uso con datos válidos",
-            "resultado_esperado": "Flujo ejecutado sin errores"
+            "accion": "Instanciar la aplicación real inyectando los repositorios mock",
+            "resultado_esperado": "Aplicación lista. Si falla aquí, el módulo no existe (red phase correcto)"
           },
           {
             "paso": 3,
-            "accion": "Verificar la respuesta del flujo",
-            "resultado_esperado": "Respuesta confirma éxito con datos correctos"
+            "accion": "Ejecutar el flujo del caso de uso con datos de entrada representativos",
+            "resultado_esperado": "Flujo ejecutado, resultado capturado"
           },
           {
             "paso": 4,
-            "accion": "Verificar que el estado del sistema refleja los cambios",
-            "resultado_esperado": "Sistema en estado consistente con los efectos esperados"
+            "accion": "Verificar la respuesta del flujo y las llamadas a los repositorios",
+            "resultado_esperado": "Comportamiento del sistema verificado end-to-end"
           }
         ],
-        "codigo_pytest": "def test_flujo_nombre_caso_uso_escenario():\n    class SistemaNombre:\n        def __init__(self):\n            self._datos = {}\n\n        def ejecutar_accion(self, payload):\n            if not payload.get('campo_requerido'):\n                raise ValueError('El campo es obligatorio.')\n            id_nuevo = len(self._datos) + 1\n            registro = {'id': id_nuevo, **payload, 'estado': 'activo'}\n            self._datos[id_nuevo] = registro\n            return registro\n\n        def buscar(self, id_buscar):\n            return self._datos.get(id_buscar)\n\n        def total(self):\n            return len(self._datos)\n\n    # Arrange\n    sistema = SistemaNombre()\n    assert sistema.total() == 0\n\n    # Act\n    resultado = sistema.ejecutar_accion({'campo_requerido': 'valor', 'otro': 123})\n\n    # Assert respuesta\n    assert resultado['id'] == 1\n    assert resultado['estado'] == 'activo'\n    assert resultado['campo_requerido'] == 'valor'\n\n    # Assert estado final\n    assert sistema.total() == 1\n    assert sistema.buscar(1) is not None",
+        "codigo_pytest": "def test_flujo_nombre_caso_uso_escenario():\n    from unittest.mock import Mock\n    from paquete.aplicacion import AplicacionX\n\n    # Arrange\n    repo_mock = Mock()\n    repo_mock.buscar.return_value = {'id': 1, 'nombre': 'dato', 'activo': True}\n    repo_mock.guardar.return_value = {'id': 10, 'campo': 'valor', 'estado': 'activo'}\n    app = AplicacionX(repo=repo_mock)\n\n    # Act\n    resultado = app.ejecutar_flujo({'id': 1, 'campo': 'valor'})\n\n    # Assert respuesta del flujo\n    assert resultado['exito'] is True\n    assert resultado['datos']['id'] == 10\n    assert resultado['datos']['estado'] == 'activo'\n\n    # Assert estado del sistema\n    repo_mock.buscar.assert_called_once_with(1)\n    repo_mock.guardar.assert_called_once()",
+        "codigo_implementacion": "# Archivo: paquete/aplicacion.py\n\nclass AplicacionX:\n    def __init__(self, repo):\n        self.repo = repo\n\n    def ejecutar_flujo(self, datos):\n        encontrado = self.repo.buscar(datos['id'])\n        if encontrado is None:\n            return {'exito': False, 'error': 'No encontrado'}\n        guardado = self.repo.guardar(datos)\n        return {'exito': True, 'datos': guardado}",
         "datos_prueba": {
-          "entrada": "{'accion': 'registrar', 'datos': {'nombre': 'Juan Perez', 'email': 'juan@test.com', 'rol': 'usuario', 'activo': True}}",
-          "salida_esperada": "{'exito': True, 'id': 1, 'mensaje': 'Operacion completada correctamente'}"
+          "entrada": "{'id': 1, 'campo': 'valor'}",
+          "salida_esperada": "{'exito': True, 'datos': {'id': 10, 'campo': 'valor', 'estado': 'activo'}}"
         },
         "criterios_aceptacion": [
-          "El flujo completo se ejecuta sin errores",
-          "El estado del sistema es consistente antes y despues",
-          "Los efectos del flujo son verificables en el estado del sistema",
-          "Los datos persisten y son accesibles tras la operación"
+          "La prueba falla (ImportError) si el módulo no existe — red phase correcto",
+          "El flujo completo se ejecuta pasando por todas las capas reales",
+          "Los repositorios son invocados con los parámetros correctos",
+          "La respuesta refleja el comportamiento correcto del sistema"
         ],
         "postcondiciones": [
-          "El sistema queda en estado consistente",
-          "Los datos creados o modificados son accesibles"
+          "Los repositorios fueron invocados correctamente",
+          "La respuesta contiene los datos esperados del flujo"
         ],
         "tipo_validacion": "sistema"
       }
@@ -151,24 +173,23 @@ Las pruebas de sistema validan el comportamiento completo desde la perspectiva d
 - Es un string donde los saltos de línea se representan como \n
 - NUNCA uses comillas dobles dentro del código Python — usa SOLO comillas simples
 - La función SIEMPRE empieza con "def test_"
-- Todos los imports van DENTRO de la función (solo stdlib, sin dependencias externas)
-- El sistema inline NUNCA usa mocks — todo el comportamiento se implementa explícitamente
-- El sistema debe tener estado interno (listas o dicts) que cambie con las operaciones
-- SIEMPRE verifica el estado del sistema ANTES y DESPUÉS del flujo
-- El código debe poder ejecutarse con "pytest" sin ninguna dependencia externa del proyecto
+- SIEMPRE importa la clase de aplicación desde el módulo real del proyecto
+- NUNCA definas el sistema inline en el test
+- Mockea SOLO los repositorios/dependencias externas, nunca la aplicación en sí
+- El código DEBE fallar con ImportError si el módulo no existe — ese es el red phase correcto
+- SIEMPRE verifica tanto la respuesta del flujo como las llamadas a los repositorios
+
+=== REGLAS CRÍTICAS PARA EL CAMPO codigo_implementacion ===
+
+- Incluye el path del archivo como comentario: # Archivo: paquete/aplicacion.py
+- El nombre de la clase debe coincidir EXACTAMENTE con el import del codigo_pytest
+- La lógica debe ser mínima pero real — suficiente para que la prueba pase
+- Los saltos de línea se representan como \n
 
 === CONSIDERACIONES TÉCNICAS ===
 
-- Verificar siempre el estado del sistema antes Y después del flujo (assert inicial + assert final)
-- Incluir pruebas de los flujos alternativos de los casos de uso en pruebas separadas
-- Cada prueba debe ser independiente: instanciar el sistema desde cero en cada test
-- Para flujos de error, usar pytest.raises() y verificar el estado no cambió
+- Para flujos de error: verifica que el repo NO fue llamado con repo_mock.guardar.assert_not_called()
+- Para flujos con múltiples pasos: verifica el orden de llamadas con call_args_list si es relevante
+- Cada prueba es independiente — cada una instancia la aplicación desde cero
 
-=== CALIDAD ===
-
-- Los flujos deben ser representativos de escenarios de usuario reales
-- Cubrir los casos de uso más críticos del sistema
-- La clase del sistema inline debe implementar las reglas de negocio reales, no retornar valores fijos
-- Verificar efectos secundarios importantes: que los datos persisten, que el estado cambia correctamente
-
-GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni despues. Sin comillas dobles dentro de valores de texto.
+GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni después.

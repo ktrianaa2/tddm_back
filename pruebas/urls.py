@@ -1,5 +1,6 @@
 from django.urls import path
 from pruebas import views
+from pruebas.ejecutar import ejecutar_pruebas
 
 urlpatterns = [
     # TIPOS DE PRUEBA
@@ -16,4 +17,6 @@ urlpatterns = [
     path('editar/<int:prueba_id>/', views.editar_prueba, name='editar_prueba'),
     path('eliminar/<int:prueba_id>/', views.eliminar_prueba, name='eliminar_prueba'),
     path('aprobar/<int:prueba_id>/', views.aprobar_prueba, name='aprobar_prueba'),
+
+    path('ejecutar/', ejecutar_pruebas, name='ejecutar_pruebas'),
 ]
