@@ -8,6 +8,7 @@ import json
 import os
 import anthropic
 from django.conf import settings
+import ast
 
 # Importar modelos necesarios
 from pruebas.models import TiposPrueba, Pruebas
@@ -140,40 +141,152 @@ def parsear_respuesta_ia(texto):
 
 def _normalizar_saltos_linea_en_strings(texto):
     """
-    Recorre el texto carácter a carácter, identifica strings (entre comillas),
+    Recorre el JSON carácter a carácter, identifica strings (entre comillas dobles),
     y reemplaza saltos de línea dentro de ellos con \\n escapado.
+    
+    VERSIÓN MEJORADA: Maneja mejor los escapes existentes.
     """
     resultado = []
     en_string = False
-    char_anterior = ''
     i = 0
     
     while i < len(texto):
         char = texto[i]
         
-        # Detectar inicio/fin de string (comillas dobles no escapadas)
-        if char == '"' and char_anterior != '\\':
-            en_string = not en_string
+        # Detectar comilla doble (no escapada)
+        if char == '"':
+            # Contar cuántos backslashes hay antes
+            num_backslash = 0
+            j = i - 1
+            while j >= 0 and texto[j] == '\\':
+                num_backslash += 1
+                j -= 1
+            
+            # Si hay número par de backslash (incluyendo 0), la comilla no está escapada
+            if num_backslash % 2 == 0:
+                en_string = not en_string
+            
             resultado.append(char)
+        
         # Si estamos dentro de un string y encontramos salto de línea
-        elif en_string and char in ('\n', '\r'):
-            # Reemplazar con escape
-            if char == '\n':
+        elif en_string and char == '\n':
+            resultado.append('\\n')
+        
+        # Si estamos dentro de un string y encontramos retorno de carro
+        elif en_string and char == '\r':
+            # Solo agregar si el siguiente no es \n (para no duplicar)
+            if i + 1 < len(texto) and texto[i + 1] == '\n':
                 resultado.append('\\n')
-            elif char == '\r':
-                # Ignorar \r o convertir a \n
-                if i + 1 < len(texto) and texto[i + 1] == '\n':
-                    resultado.append('\\n')
-                    i += 1  # Saltar el siguiente \n
-                else:
-                    resultado.append('\\n')
+                i += 1  # Saltar el siguiente \n
+            else:
+                resultado.append('\\n')
+        
         else:
             resultado.append(char)
         
-        char_anterior = char
         i += 1
     
     return ''.join(resultado)
+ 
+ 
+def parsear_respuesta_ia(texto):
+    """
+    Parsea JSON robusto que puede contener:
+    - Bloques markdown ```json...```
+    - Saltos de línea DENTRO de strings (sin escapar)
+    - Caracteres especiales sin escapar
+    - Comillas simples en valores
+    
+    VERSIÓN MEJORADA: 7 intentos progresivos para obtener JSON válido.
+    """
+    import re
+    import json
+    
+    if not texto or not texto.strip():
+        raise ValueError("Texto vacío")
+ 
+    texto_original = texto.strip()
+    texto = texto_original
+ 
+    print(f"[DEBUG] Texto a parsear: {len(texto)} caracteres")
+ 
+    # 1. Intento directo (a veces funciona)
+    try:
+        print("[DEBUG] Intento 1: Parseo directo")
+        return json.loads(texto)
+    except json.JSONDecodeError as e:
+        print(f"[DEBUG] Intento 1 falló: {str(e)[:100]}")
+ 
+    # 2. Extraer bloque markdown ```json...```
+    match_json = re.search(r'```json\s*([\s\S]*?)\s*```', texto)
+    if match_json:
+        candidato = match_json.group(1).strip()
+        print(f"[DEBUG] Intento 2: Bloque markdown ```json encontrado ({len(candidato)} chars)")
+        try:
+            return json.loads(candidato)
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] Intento 2 falló: {str(e)[:100]}")
+            texto = candidato
+ 
+    # 3. Extraer bloque markdown ```...```
+    match_gen = re.search(r'```\s*([\s\S]*?)\s*```', texto)
+    if match_gen:
+        candidato = match_gen.group(1).strip()
+        print(f"[DEBUG] Intento 3: Bloque markdown ``` genérico encontrado ({len(candidato)} chars)")
+        try:
+            return json.loads(candidato)
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] Intento 3 falló: {str(e)[:100]}")
+            texto = candidato
+ 
+    # 4. Extraer bloque { ... }
+    inicio = texto.find('{')
+    fin = texto.rfind('}') + 1
+    if inicio != -1 and fin > inicio:
+        texto = texto[inicio:fin]
+        print(f"[DEBUG] Intento 4: Bloque {{ }} extraído ({len(texto)} chars)")
+        try:
+            return json.loads(texto)
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] Intento 4 falló: {str(e)[:100]}")
+ 
+    # 5. CRÍTICO: Normalizar saltos de línea dentro de strings
+    print("[DEBUG] Intento 5: Normalizando saltos de línea en strings...")
+    texto_normalizado = _normalizar_saltos_linea_en_strings(texto)
+    
+    try:
+        return json.loads(texto_normalizado)
+    except json.JSONDecodeError as e:
+        print(f"[DEBUG] Intento 5 falló: {str(e)[:100]}")
+ 
+    # 6. Limpiar JSON malformado
+    print("[DEBUG] Intento 6: Limpiando JSON malformado...")
+    texto_limpio = re.sub(r',\s*([}\]])', r'\1', texto_normalizado)  # Comas finales
+    texto_limpio = re.sub(r':\s*None\b', ': null', texto_limpio)      # None -> null
+    texto_limpio = re.sub(r':\s*True\b', ': true', texto_limpio)      # True -> true
+    texto_limpio = re.sub(r':\s*False\b', ': false', texto_limpio)    # False -> false
+    
+    try:
+        return json.loads(texto_limpio)
+    except json.JSONDecodeError as e:
+        print(f"[DEBUG] Intento 6 falló: {str(e)[:100]}")
+ 
+    # 7. Último recurso: ast.literal_eval (solo si parece Python dict)
+    if texto_limpio.strip().startswith('{'):
+        try:
+            print("[DEBUG] Intento 7: ast.literal_eval...")
+            resultado = ast.literal_eval(texto_limpio)
+            if isinstance(resultado, dict):
+                return json.loads(json.dumps(resultado))
+        except (ValueError, SyntaxError) as e:
+            print(f"[DEBUG] Intento 7 falló: {str(e)[:100]}")
+ 
+    # Error final
+    preview = texto[:300].replace('\n', ' ').replace('\r', ' ')
+    raise ValueError(
+        f"No se puede parsear como JSON después de 7 intentos. "
+        f"Primeros 300 chars: {preview}"
+    )
 
 def generar_codigo_prueba(proyecto_id, tipo_prueba_nombre):
     """
