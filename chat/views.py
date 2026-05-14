@@ -64,7 +64,6 @@ def validar_respuesta_ia(respuesta_text):
         return False, "Respuesta vacía", None
     return True, None, respuesta_text.strip()
 
-
 def parsear_respuesta_ia(texto):
     """
     Parsea JSON de forma robusta. Maneja markdown, comillas simples, comas finales.
@@ -75,7 +74,8 @@ def parsear_respuesta_ia(texto):
     if not texto or not texto.strip():
         raise ValueError("Texto vacío")
 
-    texto = texto.strip()
+    texto_original = texto.strip()
+    texto = texto_original
 
     # 1. JSON directo
     try:
@@ -84,44 +84,55 @@ def parsear_respuesta_ia(texto):
         pass
 
     # 2. Extraer de bloques markdown ```json...``` o ```...```
-    for patron in [r'```json\s*([\s\S]*?)```', r'```\s*([\s\S]*?)```']:
+    # IMPORTANTE: Usar captura no-greedy con [\s\S]*? y ser explícito con espacios en blanco
+    for patron in [r'```json\s*([\s\S]*?)\s*```', r'```\s*([\s\S]*?)\s*```']:
         match = re.search(patron, texto, re.DOTALL)
         if match:
             candidato = match.group(1).strip()
+            print(f"[DEBUG] Bloque markdown encontrado. Longitud: {len(candidato)} chars")
             try:
-                return json.loads(candidato)
-            except json.JSONDecodeError:
+                resultado = json.loads(candidato)
+                print(f"[DEBUG] JSON parseado exitosamente desde bloque markdown")
+                return resultado
+            except json.JSONDecodeError as e:
+                # Si falla, continuar con limpieza
+                print(f"[DEBUG] JSON en bloque markdown falló, intentando limpieza: {str(e)}")
                 texto = candidato
                 break
 
-    # 3. Extraer bloque JSON { ... }
+    # 3. Si aún no hemos encontrado JSON válido, extraer bloque { ... }
     inicio = texto.find('{')
     fin = texto.rfind('}') + 1
     if inicio != -1 and fin > inicio:
+        print(f"[DEBUG] Extrayendo bloque {{ ... }} desde posición {inicio} a {fin}")
         texto = texto[inicio:fin]
 
     # 4. Limpiar JSON malformado
-    texto_limpio = re.sub(r',\s*([}\]])', r'\1', texto)
-    texto_limpio = re.sub(r':\s*None\b', ': null', texto_limpio)
+    texto_limpio = re.sub(r',\s*([}\]])', r'\1', texto)  # Eliminar comas antes de }]
+    texto_limpio = re.sub(r':\s*None\b', ': null', texto_limpio)  # None -> null
+    texto_limpio = re.sub(r":\s*'([^']*)'", r': "\1"', texto_limpio)  # Comillas simples -> dobles
     
     try:
+        print(f"[DEBUG] Intentando parsear JSON limpio...")
         return json.loads(texto_limpio)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"[DEBUG] Parseo de JSON limpio falló: {str(e)}")
         pass
 
     # 5. Último recurso: ast.literal_eval si tiene comillas simples
     import ast
     try:
+        print(f"[DEBUG] Intentando ast.literal_eval...")
         resultado = ast.literal_eval(texto_limpio)
         if isinstance(resultado, dict):
             return json.loads(json.dumps(resultado))
-    except (ValueError, SyntaxError):
+    except (ValueError, SyntaxError) as e:
+        print(f"[DEBUG] ast.literal_eval falló: {str(e)}")
         pass
 
     # Error final
     preview = texto[:200].replace('\n', ' ')
     raise ValueError(f"No se puede parsear como JSON. Primeros 200 chars: {preview}")
-
 
 def generar_codigo_prueba(proyecto_id, tipo_prueba_nombre):
     """
