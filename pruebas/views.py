@@ -19,22 +19,21 @@ from usuarios.models import Usuarios
 #   - str doblemente escapado:  '"{\\"objetivo\\": \\"...\\"}"'
 # Siempre devuelve un dict plano listo para usar.
 def _normalizar_prueba(valor):
-    if valor is None:
+    
+    if not valor:
         return {}
     if isinstance(valor, dict):
         return valor
-    if isinstance(valor, (list,)):
-        return {}
+    
     if isinstance(valor, str):
-        parsed = valor
-        for _ in range(3):
-            try:
-                parsed = json.loads(parsed)
-                if isinstance(parsed, dict):
-                    return parsed
-            except (json.JSONDecodeError, TypeError):
-                return {}
-        return {}
+        try:
+            parsed = json.loads(valor)
+           
+            if isinstance(parsed, str):
+                return _normalizar_prueba(parsed)
+            return parsed if isinstance(parsed, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
     return {}
 
 

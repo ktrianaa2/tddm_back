@@ -16,35 +16,24 @@ import json
 @csrf_exempt
 @require_http_methods(["GET"])
 def listar_motores_bd(request):
-    """Lista todos los motores de BD disponibles"""
     payload = validar_token(request)
     if not payload or 'error' in payload:
         return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+    # .only() aqui pon los motores del json, PORFAVOR USA ESTO 😄
+    motores = TiposMotorBd.objects.filter(activo=True).only(
+        'id', 'nombre', 'descripcion', 'extension_archivo', 'sintaxis_especifica', 'color'
+    )
+    
+    data = [{
+        'id': m.id,
+        'nombre': m.nombre,
+        'descripcion': m.descripcion or '',
+        'color': m.color
+    } for m in motores]
+    
+    return JsonResponse({'data': data, 'total': len(data)}, status=200)
 
-    try:
-        motores = TiposMotorBd.objects.filter(activo=True).select_related()
-        
-        data = []
-        for motor in motores:
-            data.append({
-                'id': motor.id,
-                'nombre': motor.nombre,
-                'descripcion': motor.descripcion or '',
-                'extension_archivo': motor.extension_archivo or '',
-                'sintaxis_especifica': motor.sintaxis_especifica or '',
-                'color': motor.color
-            })
-        
-        return JsonResponse({
-            'data': data,
-            'total': len(data)
-        }, status=200)
 
-    except Exception as e:
-        return JsonResponse({
-            'error': f'Error interno del servidor: {str(e)}',
-            'tipo': type(e).__name__
-        }, status=500)
 
 
 # --------------------------------

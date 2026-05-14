@@ -3,9 +3,10 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
+from django.db.models import F
 import json
 import os
-from google import genai
+import anthropic
 from django.conf import settings
 
 # Importar modelos necesarios
@@ -18,15 +19,15 @@ from esquemas_bd.models import *
 from requisitos.models import Requisitos
 from historiasdeusuario.models import HistoriasUsuario, HistoriasEstimaciones
 from casosdeuso.models import CasosUso, RelacionesCasosUso
+from chat.generador_resumenes import generar_resumenes_documentacion as generar_resumenes
 
-# Configurar cliente de Gemini
-try:
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-except AttributeError:
-    print("ADVERTENCIA: No se encontró GEMINI_API_KEY en settings.py")
-    client = genai.Client()
+# Configurar cliente de Claude
+api_key = getattr(settings, 'CLAUDE_API_KEY', None)
+if not api_key:
+    raise ValueError("CLAUDE_API_KEY no configurada en settings.py o variables de entorno")
+client = anthropic.Anthropic(api_key=api_key)
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "claude-haiku-4-5-20251001"
 
 # Mapeo de prefijos por tipo de prueba
 PREFIJOS_TIPO_PRUEBA = {
@@ -42,6 +43,84 @@ PROMPT_FILES = {
     'componente': 'pruebas_componentes.txt',
     'sistema': 'pruebas_sistema.txt',
 }
+
+
+def log_response(response_data, status_code):
+    """Registra respuesta JSON en consola con formato claro."""
+    print(f"\n[RESPONSE STATUS {status_code}]")
+    print(json.dumps(response_data, ensure_ascii=False, indent=2))
+    print()
+
+
+def json_response(data, status=200):
+    """Wrapper que retorna JsonResponse y registra en consola."""
+    log_response(data, status)
+    return JsonResponse(data, status=status)
+
+
+def validar_respuesta_ia(respuesta_text):
+    """Validación simple: solo verifica que no esté vacía."""
+    if not respuesta_text or not respuesta_text.strip():
+        return False, "Respuesta vacía", None
+    return True, None, respuesta_text.strip()
+
+
+def parsear_respuesta_ia(texto):
+    """
+    Parsea JSON de forma robusta. Maneja markdown, comillas simples, comas finales.
+    Estrategia: intentar progresivamente métodos menos estrictos.
+    """
+    import re
+    
+    if not texto or not texto.strip():
+        raise ValueError("Texto vacío")
+
+    texto = texto.strip()
+
+    # 1. JSON directo
+    try:
+        return json.loads(texto)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Extraer de bloques markdown ```json...``` o ```...```
+    for patron in [r'```json\s*([\s\S]*?)```', r'```\s*([\s\S]*?)```']:
+        match = re.search(patron, texto, re.DOTALL)
+        if match:
+            candidato = match.group(1).strip()
+            try:
+                return json.loads(candidato)
+            except json.JSONDecodeError:
+                texto = candidato
+                break
+
+    # 3. Extraer bloque JSON { ... }
+    inicio = texto.find('{')
+    fin = texto.rfind('}') + 1
+    if inicio != -1 and fin > inicio:
+        texto = texto[inicio:fin]
+
+    # 4. Limpiar JSON malformado
+    texto_limpio = re.sub(r',\s*([}\]])', r'\1', texto)
+    texto_limpio = re.sub(r':\s*None\b', ': null', texto_limpio)
+    
+    try:
+        return json.loads(texto_limpio)
+    except json.JSONDecodeError:
+        pass
+
+    # 5. Último recurso: ast.literal_eval si tiene comillas simples
+    import ast
+    try:
+        resultado = ast.literal_eval(texto_limpio)
+        if isinstance(resultado, dict):
+            return json.loads(json.dumps(resultado))
+    except (ValueError, SyntaxError):
+        pass
+
+    # Error final
+    preview = texto[:200].replace('\n', ' ')
+    raise ValueError(f"No se puede parsear como JSON. Primeros 200 chars: {preview}")
 
 
 def generar_codigo_prueba(proyecto_id, tipo_prueba_nombre):
@@ -204,23 +283,9 @@ def _formatear_especificaciones_texto(especificaciones):
     }
 
 
-def cargar_template_prompt(especificaciones):
-    """
-    Carga el template del prompt para pruebas unitarias.
-    """
-    return _cargar_prompt_por_tipo(especificaciones, 'unitaria')
-
-
 def _cargar_prompt_por_tipo(especificaciones, tipo_prueba):
     """
     Carga el template del prompt según el tipo de prueba y lo rellena con datos.
-
-    Args:
-        especificaciones: Dict con proyecto, requisitos, historias y casos de uso
-        tipo_prueba: 'unitaria' | 'componente' | 'sistema'
-
-    Returns:
-        String con el prompt completo listo para usar
     """
     archivo_prompt = PROMPT_FILES.get(tipo_prueba, 'pruebas_unitarias.txt')
 
@@ -262,89 +327,10 @@ def _cargar_prompt_por_tipo(especificaciones, tipo_prueba):
         raise
 
 
-def parsear_respuesta_ia(texto):
-    """
-    Parsea la respuesta de la IA de forma robusta.
-    Maneja: bloques markdown, comillas simples, comas finales,
-    texto previo/posterior al JSON y otras variantes de Gemini.
-    """
-    import re
-
-    if not texto or not texto.strip():
-        raise ValueError("La IA devolvió una respuesta vacía")
-
-    texto = texto.strip()
-
-    # --- Intento 1: JSON directo ---
-    try:
-        return json.loads(texto)
-    except json.JSONDecodeError:
-        pass
-
-    # --- Intento 2: Extraer de bloque markdown ```json ... ``` o ``` ... ``` ---
-    for patron in [r'```json\s*([\s\S]*?)```', r'```\s*([\s\S]*?)```']:
-        match = re.search(patron, texto, re.DOTALL)
-        if match:
-            candidato = match.group(1).strip()
-            try:
-                return json.loads(candidato)
-            except json.JSONDecodeError:
-                texto = candidato  # Seguir procesando este candidato
-                break
-
-    # --- Intento 3: Extraer el bloque JSON más externo { ... } ---
-    inicio = texto.find('{')
-    fin = texto.rfind('}') + 1
-    if inicio != -1 and fin > inicio:
-        texto = texto[inicio:fin]
-
-    try:
-        return json.loads(texto)
-    except json.JSONDecodeError:
-        pass
-
-    # --- Intento 4: Limpiar comas finales antes de } o ] (JSON5 style) ---
-    # Gemini a veces genera {"key": "val",} o ["a","b",]
-    texto_limpio = re.sub(r',\s*([}\]])', r'\1', texto)
-    try:
-        return json.loads(texto_limpio)
-    except json.JSONDecodeError:
-        pass
-
-    # --- Intento 5: Reemplazar comillas simples por dobles con cuidado ---
-    # Solo si el JSON parece usar comillas simples como delimitador principal
-    if texto_limpio.count("'") > texto_limpio.count('"'):
-        try:
-            # Escapar comillas dobles internas, luego reemplazar simples
-            texto_comillas = texto_limpio.replace('"', '\\"')
-            texto_comillas = texto_comillas.replace("'", '"')
-            return json.loads(texto_comillas)
-        except json.JSONDecodeError:
-            pass
-
-    # --- Intento 6: Usar ast.literal_eval como último recurso ---
-    import ast
-    try:
-        resultado = ast.literal_eval(texto_limpio)
-        if isinstance(resultado, dict):
-            # Convertir a JSON y volver a parsear para normalizar
-            return json.loads(json.dumps(resultado))
-    except (ValueError, SyntaxError):
-        pass
-
-    # --- Sin solución: reportar error con contexto útil ---
-    preview = texto[:300].replace('\n', ' ')
-    raise ValueError(
-        f"No se pudo parsear la respuesta de la IA como JSON válido. "
-        f"Primeros 300 chars: {preview}"
-    )
-
-
 def _guardar_pruebas_en_bd(proyecto, tipo_prueba_nombre, pruebas_json):
     """
     Lógica reutilizable para guardar pruebas en BD.
     """
-    # Asegurar que tipo_prueba_nombre sea string
     if not isinstance(tipo_prueba_nombre, str):
         tipo_prueba_nombre = str(tipo_prueba_nombre)
 
@@ -360,7 +346,9 @@ def _guardar_pruebas_en_bd(proyecto, tipo_prueba_nombre, pruebas_json):
         """Convierte cualquier valor a string de forma segura."""
         if value is None:
             return ''
-        if isinstance(value, (dict, list)):
+        if isinstance(value, dict):
+            result = json.dumps(value, ensure_ascii=False)
+        elif isinstance(value, list):
             result = json.dumps(value, ensure_ascii=False)
         else:
             result = str(value)
@@ -373,35 +361,29 @@ def _guardar_pruebas_en_bd(proyecto, tipo_prueba_nombre, pruebas_json):
         for idx, prueba_data in enumerate(pruebas_json.get('pruebas', [])):
             codigo_generado = generar_codigo_prueba(proyecto.id, tipo_prueba.nombre)
 
-            # ── detalles ──────────────────────────────────────────────
             detalles_completos = prueba_data.get('detalles', {})
+            
             if isinstance(detalles_completos, str):
                 try:
                     detalles_completos = json.loads(detalles_completos)
                 except Exception:
                     detalles_completos = {}
+            
             if not isinstance(detalles_completos, dict):
                 detalles_completos = {}
 
-            # Si detalles está vacío, usar el resto de prueba_data
             if not detalles_completos:
                 detalles_completos = {
                     k: v for k, v in prueba_data.items()
                     if k not in ('nombre', 'descripcion', 'especificacion_relacionada')
                 }
 
-            # FIX: Guardar detalles_completos como dict directamente en el JSONField
-            # en lugar de serializarlo a string con json.dumps().
-            # Esto evita que el campo quede como string (doble-encoded) en la BD,
-            # lo que causaba que al leerlo y re-guardarlo se alterara el formato.
             prueba_json_obj = json.dumps(detalles_completos, ensure_ascii=False)
 
-            # ── especificacion_relacionada ─────────────────────────────
             especificacion_relacionada = _to_str(
                 prueba_data.get('especificacion_relacionada', ''), max_len=100
             )
 
-            # ── nombre y descripcion ───────────────────────────────────
             nombre = _to_str(
                 prueba_data.get('nombre', f'Prueba {codigo_generado}')
             )
@@ -429,13 +411,14 @@ def _guardar_pruebas_en_bd(proyecto, tipo_prueba_nombre, pruebas_json):
 
     return pruebas_creadas, tipo_prueba
 
+
 def _generar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
     """
     Lógica genérica reutilizable para generar pruebas de cualquier tipo.
     """
     payload = validar_token(request)
     if not payload or 'error' in payload:
-        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+        return json_response({'error': 'Token inválido o requerido'}, status=401)
 
     try:
         print("=" * 50)
@@ -444,33 +427,57 @@ def _generar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
-            return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El proyecto especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
         especificaciones['proyecto'] = proyecto
 
         if not especificaciones['tiene_especificaciones']:
-            return JsonResponse({
-                'error': 'No hay especificaciones en el proyecto para generar pruebas'
+            return json_response({
+                'error': 'No hay especificaciones en el proyecto para generar pruebas',
+                'tipo_error': 'sin_especificaciones'
             }, status=400)
 
         prompt = _cargar_prompt_por_tipo(especificaciones, tipo_prueba)
 
-        print(f"[DEBUG] Llamando a API para pruebas de {tipo_prueba}...")
-        response = client.models.generate_content(
+        print(f"[DEBUG] Llamando a Claude API para pruebas de {tipo_prueba}...")
+        response = client.messages.create(
             model=MODEL_NAME,
-            contents=[prompt]
+            max_tokens=4096,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
 
-        pruebas_generadas = response.text
+        pruebas_generadas = response.content[0].text
+
+        es_valida, error_msg, respuesta_limpia = validar_respuesta_ia(pruebas_generadas)
+        if not es_valida:
+            return json_response({
+                'error': 'No se pudieron generar las pruebas',
+                'tipo_error': 'respuesta_ia_invalida',
+                'detalle': error_msg,
+                'respuesta_obtenida': pruebas_generadas[:500]
+            }, status=500)
 
         try:
-            pruebas_json = parsear_respuesta_ia(pruebas_generadas)
+            pruebas_json = parsear_respuesta_ia(respuesta_limpia)
         except ValueError as e:
-            return JsonResponse({
+            return json_response({
                 'error': 'No se pudo procesar la respuesta de la IA',
+                'tipo_error': 'parseo_json_fallido',
                 'detalle': str(e),
-                'respuesta_ia': pruebas_generadas[:500]
+                'respuesta_obtenida': respuesta_limpia[:500]
+            }, status=500)
+
+        if not pruebas_json.get('pruebas'):
+            return json_response({
+                'error': 'La respuesta no contiene pruebas válidas',
+                'tipo_error': 'respuesta_incompleta',
+                'respuesta_obtenida': pruebas_json
             }, status=500)
 
         pruebas_creadas, tipo_prueba_obj = _guardar_pruebas_en_bd(proyecto, tipo_prueba, pruebas_json)
@@ -488,7 +495,8 @@ def _generar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
         print(f"[DEBUG] Generadas {len(pruebas_creadas)} pruebas de {tipo_prueba}")
         print("=" * 50)
 
-        return JsonResponse({
+        return json_response({
+            'exito': True,
             'mensaje': f'Se generaron {len(pruebas_creadas)} pruebas de {tipo_prueba} exitosamente',
             'proyecto_id': proyecto_id,
             'proyecto_nombre': proyecto.nombre,
@@ -504,7 +512,11 @@ def _generar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
         import traceback
         print(f"[ERROR FATAL] {str(e)}")
         traceback.print_exc()
-        return JsonResponse({'error': f'Error al generar pruebas: {str(e)}'}, status=500)
+        return json_response({
+            'error': 'Error al generar pruebas',
+            'tipo_error': 'error_interno',
+            'detalle': str(e)
+        }, status=500)
 
 
 def _previsualizar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
@@ -513,37 +525,55 @@ def _previsualizar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
     """
     payload = validar_token(request)
     if not payload or 'error' in payload:
-        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+        return json_response({'error': 'Token inválido o requerido'}, status=401)
 
     try:
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
-            return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El proyecto especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
         especificaciones['proyecto'] = proyecto
 
         if not especificaciones['tiene_especificaciones']:
-            return JsonResponse({
-                'error': 'No hay especificaciones en el proyecto para generar pruebas'
+            return json_response({
+                'error': 'No hay especificaciones en el proyecto para generar pruebas',
+                'tipo_error': 'sin_especificaciones'
             }, status=400)
 
         prompt = _cargar_prompt_por_tipo(especificaciones, tipo_prueba)
 
-        response = client.models.generate_content(
+        response = client.messages.create(
             model=MODEL_NAME,
-            contents=[prompt]
+            max_tokens=4096,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
 
-        pruebas_generadas = response.text
+        pruebas_generadas = response.content[0].text
+
+        es_valida, error_msg, respuesta_limpia = validar_respuesta_ia(pruebas_generadas)
+        if not es_valida:
+            return json_response({
+                'error': 'No se pudieron previsualizar las pruebas',
+                'tipo_error': 'respuesta_ia_invalida',
+                'detalle': error_msg,
+                'respuesta_obtenida': pruebas_generadas[:500]
+            }, status=500)
 
         try:
-            pruebas_json = parsear_respuesta_ia(pruebas_generadas)
+            pruebas_json = parsear_respuesta_ia(respuesta_limpia)
         except ValueError as e:
-            return JsonResponse({
+            return json_response({
                 'error': 'No se pudo procesar la respuesta de la IA',
-                'detalle': str(e)
+                'tipo_error': 'parseo_json_fallido',
+                'detalle': str(e),
+                'respuesta_obtenida': respuesta_limpia[:500]
             }, status=500)
 
         tipo_prueba_obj, _ = TiposPrueba.objects.get_or_create(
@@ -570,7 +600,8 @@ def _previsualizar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
 
         proyecto_estado_actual = proyecto.estado.nombre if hasattr(proyecto.estado, 'nombre') else str(proyecto.estado)
 
-        return JsonResponse({
+        return json_response({
+            'exito': True,
             'mensaje': f'Pruebas de {tipo_prueba} generadas (sin guardar)',
             'proyecto_id': proyecto_id,
             'proyecto_nombre': proyecto.nombre,
@@ -584,7 +615,11 @@ def _previsualizar_pruebas_por_tipo(request, proyecto_id, tipo_prueba):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JsonResponse({'error': f'Error al generar pruebas: {str(e)}'}, status=500)
+        return json_response({
+            'error': 'Error al generar pruebas',
+            'tipo_error': 'error_interno',
+            'detalle': str(e)
+        }, status=500)
 
 
 # ============================================================
@@ -655,7 +690,7 @@ def generar_pruebas_multiple(request, proyecto_id):
     """
     payload = validar_token(request)
     if not payload or 'error' in payload:
-        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+        return json_response({'error': 'Token inválido o requerido'}, status=401)
 
     try:
         body = json.loads(request.body) if request.body else {}
@@ -663,28 +698,32 @@ def generar_pruebas_multiple(request, proyecto_id):
 
         tipos_validos = [t for t in tipos_solicitados if t in PROMPT_FILES]
         if not tipos_validos:
-            return JsonResponse({
-                'error': f'Tipos inválidos. Tipos válidos: {list(PROMPT_FILES.keys())}'
+            return json_response({
+                'error': f'Tipos inválidos. Tipos válidos: {list(PROMPT_FILES.keys())}',
+                'tipo_error': 'parametros_invalidos'
             }, status=400)
 
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
-            return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El proyecto especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
         especificaciones['proyecto'] = proyecto
 
         if not especificaciones['tiene_especificaciones']:
-            return JsonResponse({
-                'error': 'No hay especificaciones en el proyecto para generar pruebas'
+            return json_response({
+                'error': 'No hay especificaciones en el proyecto para generar pruebas',
+                'tipo_error': 'sin_especificaciones'
             }, status=400)
 
         resultados = {}
         total_pruebas = 0
         errores = []
 
-        # Obtener conteo de especificaciones para el log de progreso
         n_req = len(especificaciones.get('requisitos', []) or [])
         n_hist = len(especificaciones.get('historias_usuario', []) or [])
         n_cu = len(especificaciones.get('casos_uso', []) or [])
@@ -699,14 +738,27 @@ def generar_pruebas_multiple(request, proyecto_id):
                 print(f"[PROGRESO] [{i}/{len(tipos_validos)}] Cargando prompt para {tipo}...")
                 prompt = _cargar_prompt_por_tipo(especificaciones, tipo)
 
-                print(f"[PROGRESO] [{i}/{len(tipos_validos)}] Enviando {total_specs} especificaciones a Gemini para pruebas de {tipo}...")
-                response = client.models.generate_content(
+                print(f"[PROGRESO] [{i}/{len(tipos_validos)}] Enviando {total_specs} especificaciones a Claude para pruebas de {tipo}...")
+                response = client.messages.create(
                     model=MODEL_NAME,
-                    contents=[prompt]
+                    max_tokens=4096,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
                 )
-                print(f"[PROGRESO] [{i}/{len(tipos_validos)}] Respuesta recibida de Gemini para {tipo}. Procesando JSON...")
+                print(f"[PROGRESO] [{i}/{len(tipos_validos)}] Respuesta recibida de Claude para {tipo}. Procesando JSON...")
 
-                pruebas_json = parsear_respuesta_ia(response.text)
+                respuesta_ia = response.content[0].text
+                es_valida, error_msg, respuesta_limpia = validar_respuesta_ia(respuesta_ia)
+                
+                if not es_valida:
+                    msg = f"Respuesta de IA inválida: {error_msg}"
+                    print(f"[ERROR] [{i}/{len(tipos_validos)}] {msg}")
+                    errores.append({'tipo': tipo, 'error': msg, 'categoria': 'respuesta_ia', 'respuesta_obtenida': respuesta_ia[:500]})
+                    resultados[tipo] = {'estado': 'error', 'total': 0, 'pruebas': [], 'error': msg}
+                    continue
+
+                pruebas_json = parsear_respuesta_ia(respuesta_limpia)
                 n_pruebas = len(pruebas_json.get('pruebas', []))
                 print(f"[PROGRESO] [{i}/{len(tipos_validos)}] {n_pruebas} pruebas de {tipo} parseadas. Guardando en BD...")
 
@@ -718,10 +770,9 @@ def generar_pruebas_multiple(request, proyecto_id):
                     'pruebas': pruebas_creadas
                 }
                 total_pruebas += len(pruebas_creadas)
-                print(f"[PROGRESO] [{i}/{len(tipos_validos)}] ✓ {len(pruebas_creadas)} pruebas de {tipo} guardadas exitosamente.")
+                print(f"[PROGRESO] [{i}/{len(tipos_validos)}] {len(pruebas_creadas)} pruebas de {tipo} guardadas exitosamente.")
 
             except ValueError as e:
-                # Error de parseo JSON — respuesta de Gemini no procesable
                 msg = f"Error al procesar respuesta de IA para {tipo}: {str(e)}"
                 print(f"[ERROR] [{i}/{len(tipos_validos)}] {msg}")
                 errores.append({'tipo': tipo, 'error': msg, 'categoria': 'parseo'})
@@ -741,7 +792,8 @@ def generar_pruebas_multiple(request, proyecto_id):
         proyecto.refresh_from_db()
         proyecto_estado = proyecto.estado.nombre if hasattr(proyecto.estado, 'nombre') else str(proyecto.estado)
 
-        return JsonResponse({
+        return json_response({
+            'exito': total_pruebas > 0,
             'mensaje': f'Se generaron {total_pruebas} pruebas en total',
             'proyecto_id': proyecto_id,
             'proyecto_nombre': proyecto.nombre,
@@ -751,15 +803,23 @@ def generar_pruebas_multiple(request, proyecto_id):
             'tipos_generados': tipos_validos,
             'resultados_por_tipo': resultados,
             'total_pruebas': total_pruebas,
-            'errores': errores
+            'errores': errores,
+            'errores_count': len(errores)
         }, status=201)
 
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'El body de la solicitud no es JSON válido'}, status=400)
+        return json_response({
+            'error': 'El body de la solicitud no es JSON válido',
+            'tipo_error': 'json_invalido'
+        }, status=400)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JsonResponse({'error': f'Error al generar pruebas: {str(e)}'}, status=500)
+        return json_response({
+            'error': 'Error al generar pruebas',
+            'tipo_error': 'error_interno',
+            'detalle': str(e)
+        }, status=500)
 
 
 # ========================================
@@ -840,20 +900,19 @@ def cargar_template_prompt_esquema_bd(proyecto, tipo_motor, especificaciones):
 @csrf_exempt
 @require_http_methods(["POST"])
 def generar_esquema_bd(request, proyecto_id):
-    """
-    Genera un esquema de base de datos automáticamente basado en las
-    especificaciones del proyecto.
-    """
     payload = validar_token(request)
     if not payload or 'error' in payload:
-        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+        return json_response({'error': 'Token inválido o requerido'}, status=401)
 
     try:
         body = json.loads(request.body)
         tipo_motor_id = body.get('tipo_motor_id')
 
         if not tipo_motor_id:
-            return JsonResponse({'error': 'El campo tipo_motor_id es requerido'}, status=400)
+            return json_response({
+                'error': 'El campo tipo_motor_id es requerido',
+                'tipo_error': 'parametros_incompletos'
+            }, status=400)
 
         print("=" * 60)
         print(f"[DEBUG] Iniciando generación de esquema para proyecto {proyecto_id}")
@@ -861,18 +920,25 @@ def generar_esquema_bd(request, proyecto_id):
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
-            return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El proyecto especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         try:
             tipo_motor = TiposMotorBd.objects.get(id=tipo_motor_id, activo=True)
         except TiposMotorBd.DoesNotExist:
-            return JsonResponse({'error': 'El tipo de motor especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El tipo de motor especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
 
         if not especificaciones['tiene_especificaciones']:
-            return JsonResponse({
-                'error': 'El proyecto debe tener al menos un requisito, historia de usuario o caso de uso para generar el esquema de BD'
+            return json_response({
+                'error': 'El proyecto debe tener al menos un requisito, historia de usuario o caso de uso para generar el esquema de BD',
+                'tipo_error': 'sin_especificaciones'
             }, status=400)
 
         if EsquemasBd.objects.filter(
@@ -880,30 +946,48 @@ def generar_esquema_bd(request, proyecto_id):
             tipo_motor_bd_id=tipo_motor_id,
             activo=True
         ).exists():
-            return JsonResponse({
-                'error': f'Ya existe un esquema activo para {tipo_motor.nombre}. Edita el existente o desactívalo primero'
+            return json_response({
+                'error': f'Ya existe un esquema activo para {tipo_motor.nombre}. Edita el existente o desactívalo primero',
+                'tipo_error': 'recurso_duplicado'
             }, status=409)
 
         prompt = cargar_template_prompt_esquema_bd(proyecto, tipo_motor, especificaciones)
 
-        response = client.models.generate_content(
+        response = client.messages.create(
             model=MODEL_NAME,
-            contents=[prompt]
+            max_tokens=4096,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
 
-        respuesta_ia = response.text
+        respuesta_ia = response.content[0].text
+
+        es_valida, error_msg, respuesta_limpia = validar_respuesta_ia(respuesta_ia)
+        if not es_valida:
+            return json_response({
+                'error': 'No se pudo generar el esquema de BD',
+                'tipo_error': 'respuesta_ia_invalida',
+                'detalle': error_msg,
+                'respuesta_obtenida': respuesta_ia[:500]
+            }, status=500)
 
         try:
-            esquema_json = parsear_respuesta_ia(respuesta_ia)
+            esquema_json = parsear_respuesta_ia(respuesta_limpia)
         except ValueError as e:
-            return JsonResponse({
+            return json_response({
                 'error': 'No se pudo procesar la respuesta de la IA',
+                'tipo_error': 'parseo_json_fallido',
                 'detalle': str(e),
-                'respuesta_ia': respuesta_ia[:500]
+                'respuesta_obtenida': respuesta_limpia[:500]
             }, status=500)
 
         if not esquema_json.get('tablas'):
-            return JsonResponse({'error': 'El esquema generado no contiene tablas válidas'}, status=500)
+            return json_response({
+                'error': 'El esquema generado no contiene tablas válidas',
+                'tipo_error': 'respuesta_incompleta',
+                'respuesta_obtenida': esquema_json
+            }, status=500)
 
         try:
             with transaction.atomic():
@@ -914,11 +998,16 @@ def generar_esquema_bd(request, proyecto_id):
                     activo=True
                 )
         except Exception as db_error:
-            return JsonResponse({'error': f'Error al guardar el esquema: {str(db_error)}'}, status=500)
+            return json_response({
+                'error': f'Error al guardar el esquema en BD',
+                'tipo_error': 'error_bd',
+                'detalle': str(db_error)
+            }, status=500)
 
         print("=" * 60)
 
-        return JsonResponse({
+        return json_response({
+            'exito': True,
             'mensaje': 'Esquema de BD generado exitosamente',
             'esquema_id': esquema.id,
             'proyecto_id': proyecto_id,
@@ -930,11 +1019,18 @@ def generar_esquema_bd(request, proyecto_id):
         }, status=201)
 
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'El body de la solicitud no es JSON válido'}, status=400)
+        return json_response({
+            'error': 'El body de la solicitud no es JSON válido',
+            'tipo_error': 'json_invalido'
+        }, status=400)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JsonResponse({'error': f'Error al generar esquema: {str(e)}'}, status=500)
+        return json_response({
+            'error': 'Error al generar esquema',
+            'tipo_error': 'error_interno',
+            'detalle': str(e)
+        }, status=500)
 
 
 @csrf_exempt
@@ -945,46 +1041,75 @@ def previsualizar_esquema_bd(request, proyecto_id):
     """
     payload = validar_token(request)
     if not payload or 'error' in payload:
-        return JsonResponse({'error': 'Token inválido o requerido'}, status=401)
+        return json_response({'error': 'Token inválido o requerido'}, status=401)
 
     try:
         body = json.loads(request.body)
         tipo_motor_id = body.get('tipo_motor_id')
 
         if not tipo_motor_id:
-            return JsonResponse({'error': 'El campo tipo_motor_id es requerido'}, status=400)
+            return json_response({
+                'error': 'El campo tipo_motor_id es requerido',
+                'tipo_error': 'parametros_incompletos'
+            }, status=400)
 
         try:
             proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
         except Proyectos.DoesNotExist:
-            return JsonResponse({'error': 'El proyecto especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El proyecto especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         try:
             tipo_motor = TiposMotorBd.objects.get(id=tipo_motor_id, activo=True)
         except TiposMotorBd.DoesNotExist:
-            return JsonResponse({'error': 'El tipo de motor especificado no existe'}, status=404)
+            return json_response({
+                'error': 'El tipo de motor especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
 
         especificaciones = obtener_especificaciones_proyecto(proyecto_id)
 
         if not especificaciones['tiene_especificaciones']:
-            return JsonResponse({'error': 'El proyecto debe tener al menos una especificación'}, status=400)
+            return json_response({
+                'error': 'El proyecto debe tener al menos una especificación',
+                'tipo_error': 'sin_especificaciones'
+            }, status=400)
 
         prompt = cargar_template_prompt_esquema_bd(proyecto, tipo_motor, especificaciones)
 
-        response = client.models.generate_content(
+        response = client.messages.create(
             model=MODEL_NAME,
-            contents=[prompt]
+            max_tokens=4096,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
 
-        try:
-            esquema_json = parsear_respuesta_ia(response.text)
-        except ValueError as e:
-            return JsonResponse({
-                'error': 'No se pudo procesar la respuesta de la IA',
-                'detalle': str(e)
+        respuesta_ia = response.content[0].text
+
+        es_valida, error_msg, respuesta_limpia = validar_respuesta_ia(respuesta_ia)
+        if not es_valida:
+            return json_response({
+                'error': 'No se pudo generar el esquema de BD',
+                'tipo_error': 'respuesta_ia_invalida',
+                'detalle': error_msg,
+                'respuesta_obtenida': respuesta_ia[:500]
             }, status=500)
 
-        return JsonResponse({
+        try:
+            esquema_json = parsear_respuesta_ia(respuesta_limpia)
+        except ValueError as e:
+            return json_response({
+                'error': 'No se pudo procesar la respuesta de la IA',
+                'tipo_error': 'parseo_json_fallido',
+                'detalle': str(e),
+                'respuesta_obtenida': respuesta_limpia[:500]
+            }, status=500)
+
+        return json_response({
+            'exito': True,
             'mensaje': 'Esquema generado (sin guardar)',
             'proyecto_id': proyecto_id,
             'proyecto_nombre': proyecto.nombre,
@@ -996,8 +1121,96 @@ def previsualizar_esquema_bd(request, proyecto_id):
         }, status=200)
 
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'El body de la solicitud no es JSON válido'}, status=400)
+        return json_response({
+            'error': 'El body de la solicitud no es JSON válido',
+            'tipo_error': 'json_invalido'
+        }, status=400)
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JsonResponse({'error': f'Error al generar esquema: {str(e)}'}, status=500)
+        return json_response({
+            'error': 'Error al generar esquema',
+            'tipo_error': 'error_interno',
+            'detalle': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def generar_resumenes_documentacion(request, proyecto_id):
+    payload = validar_token(request)
+    if not payload or 'error' in payload:
+        return json_response({'error': 'Token inválido o requerido'}, status=401)
+    
+    try:
+        print(f"[DEBUG] Generando resúmenes para proyecto ID: {proyecto_id}")
+        
+        try:
+            proyecto = Proyectos.objects.get(id=proyecto_id, activo=True)
+        except Proyectos.DoesNotExist:
+            return json_response({
+                'error': 'El proyecto especificado no existe',
+                'tipo_error': 'recurso_no_encontrado'
+            }, status=404)
+        
+        especificaciones = obtener_especificaciones_proyecto(proyecto_id)
+        
+        requisitos = especificaciones.get('requisitos', [])
+        historias_usuario = especificaciones.get('historias_usuario', [])
+        casos_uso = especificaciones.get('casos_uso', [])
+        
+        pruebas_aprobadas = Pruebas.objects.filter(
+            proyecto_id=proyecto_id,
+            estado='Aprobada',
+            activo=True
+        ).values(
+            'id', 'nombre', 'codigo'
+        ).annotate(
+            tipo=F('tipo_prueba__nombre')
+        )
+        
+        pruebas_list = list(pruebas_aprobadas)
+        
+        print(f"[DEBUG] Requisitos encontrados: {len(requisitos)}")
+        print(f"[DEBUG] Historias encontradas: {len(historias_usuario)}")
+        print(f"[DEBUG] Casos de uso encontrados: {len(casos_uso)}")
+        print(f"[DEBUG] Pruebas aprobadas encontradas: {len(pruebas_list)}")
+        
+        esquema_bd_obj = EsquemasBd.objects.filter(
+            proyecto_id=proyecto_id,
+            activo=True
+        ).first()
+        
+        esquema_bd = esquema_bd_obj.esquema if esquema_bd_obj else None
+        
+        print(f"[DEBUG] Esquema BD encontrado: {esquema_bd_obj is not None}")
+        print(f"[DEBUG] Llamando a la IA para generar resúmenes...")
+        
+        resumenes = generar_resumenes(
+            proyecto=proyecto,
+            requisitos=requisitos,
+            historias_usuario=historias_usuario,
+            casos_uso=casos_uso,
+            pruebas_aprobadas=pruebas_list,
+            esquema_bd=esquema_bd
+        )
+        
+        print(f"[DEBUG] Resúmenes generados exitosamente")
+        
+        return json_response({
+            'exito': True,
+            'mensaje': 'Resúmenes generados exitosamente',
+            'proyecto_id': proyecto_id,
+            'proyecto_nombre': proyecto.nombre,
+            'resumenes': resumenes
+        }, status=200)
+        
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Error al generar resúmenes: {str(e)}")
+        traceback.print_exc()
+        return json_response({
+            'error': 'Error al generar resúmenes',
+            'tipo_error': 'error_interno',
+            'detalle': str(e)
+        }, status=500)

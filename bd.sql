@@ -354,7 +354,7 @@ INSERT INTO prioridades (nombre, nivel, descripcion, color, activo) VALUES
 INSERT INTO estados_proyecto (nombre, descripcion, orden, color, activo) VALUES 
 ('especificaciones', 'Fase de definición de especificaciones', 1, '#8B5CF6', TRUE),
 ('generacion', 'Fase de generacion de pruebas', 3, '#3B82F6', TRUE),
-('ejecucion', 'Fase de ejecucion de pruebas', 5, '#10B981', TRUE),
+('seguimiento', 'Fase de seguimiento de pruebas', 5, '#10B981', TRUE),
 ('finalizado', 'Proyecto finalizado', 6, '#22C55E', TRUE),
 ('cancelado', 'Proyecto cancelado', 7, '#EF4444', TRUE);
 

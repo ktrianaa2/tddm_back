@@ -19,27 +19,45 @@ def registrar_usuario(request):
         nombre = request.POST.get('nombre')
         apellido = request.POST.get('apellido')
         
-        # Validar datos requeridos (sin rol_id)
+        # Validar datos requeridos
         required_fields = {
             'usuario': usuario,
-            'contraseña': contrasenia,
+            'contrasenia': contrasenia,
             'nombre': nombre,
             'apellido': apellido
         }
         
         for field_name, field_value in required_fields.items():
             if not field_value:
-                return JsonResponse({'error': f'Campo requerido: {field_name}'}, status=400)
+                return JsonResponse({
+                    'error': f'Campo requerido: {field_name}'
+                }, status=400)
+        
+        # Validar longitud mínima del usuario
+        if len(usuario) < 3:
+            return JsonResponse({
+                'error': 'El usuario debe tener al menos 3 caracteres'
+            }, status=400)
+        
+        # Validar longitud mínima de contraseña
+        if len(contrasenia) < 6:
+            return JsonResponse({
+                'error': 'La contraseña debe tener al menos 6 caracteres'
+            }, status=400)
         
         # Verificar si el usuario ya existe
         if Usuarios.objects.filter(usuario=usuario).exists():
-            return JsonResponse({'error': 'El usuario ya existe'}, status=400)
+            return JsonResponse({
+                'error': 'El usuario ya existe'
+            }, status=400)
         
         # Asignar rol de usuario por defecto (ID = 2)
         try:
             rol = Roles.objects.get(id=2)  # Rol de "usuario"
         except Roles.DoesNotExist:
-            return JsonResponse({'error': 'Error del sistema: rol de usuario no encontrado'}, status=500)
+            return JsonResponse({
+                'error': 'Error del sistema: rol de usuario no encontrado'
+            }, status=500)
         
         # TRANSACCIÓN: Todo o nada
         with transaction.atomic():

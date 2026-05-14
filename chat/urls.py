@@ -20,4 +20,6 @@ urlpatterns = [
     # Esquema BD
     path('generar-esquema-bd/<int:proyecto_id>/', views.generar_esquema_bd, name='generar_esquema_bd'),
     path('previsualizar-esquema-bd/<int:proyecto_id>/', views.previsualizar_esquema_bd, name='previsualizar_esquema_bd'),
+
+    path('generar-resumenes-documentacion/<int:proyecto_id>/', views.generar_resumenes_documentacion, name='generar_resumenes_documentacion'),
 ]

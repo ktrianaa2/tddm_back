@@ -9,7 +9,7 @@ class CasosUso(models.Model):
     descripcion = models.TextField(blank=True, null=True)
     actores = models.TextField()
     precondiciones = models.TextField()
-    flujo_principal = models.JSONField(blank=True, null=True)
+    flujo_principal = models.JSONField(default=list) #REALIZAR CAMBIOS
     flujos_alternativos = models.JSONField(blank=True, null=True)
     postcondiciones = models.TextField(blank=True, null=True)
     requisitos_especiales = models.TextField(blank=True, null=True)

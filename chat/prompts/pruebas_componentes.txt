@@ -1,184 +1,45 @@
-Eres un ingeniero de pruebas experto en TDD (Test-Driven Development). Genera pruebas unitarias en pytest basadas en las especificaciones del proyecto.
+Eres ingeniero de pruebas TDD. Genera pruebas de componente pytest de especificaciones.
 
-PROYECTO:
-Nombre: {proyecto_nombre}
-Descripción: {proyecto_descripcion}
+PROYECTO: {proyecto_nombre}
+DESCRIPCIÓN: {proyecto_descripcion}
 
 {especificaciones_requisitos}
-
 {especificaciones_historias}
-
 {especificaciones_casos_uso}
 
-=== INSTRUCCIONES CRÍTICAS DE FORMATO ===
+=== RESPONDE SOLO JSON VÁLIDO ===
 
-RESPONDE ÚNICAMENTE CON JSON PURO. Sin texto adicional, sin bloques markdown, sin explicaciones.
-
-Tu respuesta DEBE comenzar con { y terminar con }
-
-REGLAS DE FORMATO ESTRICTAS:
-- USA SOLO comillas dobles para las claves y valores del JSON
-- NUNCA uses comillas dobles DENTRO de un valor de texto. Usa comillas simples en su lugar
-- NUNCA uses bloques markdown como ```python o ```
-- NUNCA pongas texto antes o después del JSON
-
-=== FILOSOFÍA TDD REAL — LEE ESTO ANTES DE GENERAR ===
-
-En TDD real el ciclo es:
-  🔴 RED:    El desarrollador escribe la prueba. La ejecuta. FALLA porque el código no existe.
-  🟢 GREEN:  El desarrollador escribe el código mínimo en su proyecto. La prueba PASA.
-  🔵 REFACTOR: El desarrollador limpia el código. La prueba sigue pasando.
-
-Para que este ciclo funcione, la prueba DEBE importar el código real del proyecto del
-desarrollador. Si la prueba define la lógica inline dentro del test, nunca falla en fase
-roja — se está probando a sí misma. Eso no es TDD.
-
-Por lo tanto:
-
-  ✅ codigo_pytest  → importa desde el módulo real del proyecto. Sin lógica inline.
-                      FALLARÁ en rojo porque ese módulo aún no existe.
-
-  ✅ codigo_implementacion → el contrato mínimo que el desarrollador debe crear en su
-                              proyecto para que la prueba pase. Es una GUÍA, no va
-                              dentro del test.
-
-=== CÓMO INFERIR EL MÓDULO DE IMPORTACIÓN ===
-
-A partir del nombre del proyecto y las especificaciones, infiere rutas de módulo realistas.
-Usa snake_case y estructura de paquete estándar de Python/Django.
-
-Ejemplos:
-  Proyecto "Sistema de Citas Médicas"   → from citas.servicios import CitasServicio
-  Proyecto "Gestión de Inventario"      → from inventario.servicios import InventarioServicio
-  Proyecto "E-commerce"                 → from pedidos.servicios import PedidosServicio
-
-Si el proyecto tiene nombre en español, usa ese nombre en snake_case como nombre del paquete.
-La clase a importar debe seguir PascalCase y terminar en Servicio, Repositorio, o Controlador
-según la capa que se está probando.
-
-=== REGLAS PARA GENERAR PRUEBAS ===
-
-1. COBERTURA OBLIGATORIA POR FUNCIONALIDAD:
-   - Caso exitoso con datos válidos
-   - Validación de campos obligatorios
-   - Validación de formatos inválidos
-   - Reglas de negocio específicas del dominio
-   - Valores límite
-   - Condiciones previas no cumplidas
-
-2. CÓDIGO PYTEST — REGLA MÁS IMPORTANTE:
-
-   El campo codigo_pytest SOLO contiene la prueba pura.
-   IMPORTA la clase desde el módulo real del proyecto.
-   MOCKEA únicamente las dependencias externas (repositorio, BD, APIs).
-   NO define lógica inline — eso va en codigo_implementacion.
-
-   ✅ CORRECTO:
-   "codigo_pytest": "def test_crear_cita_paciente_inexistente_lanza_error():\n    from unittest.mock import Mock\n    import pytest\n    from citas.servicios import CitasServicio\n\n    # Arrange\n    repo_mock = Mock()\n    repo_mock.buscar_paciente.return_value = None\n    servicio = CitasServicio(repo_mock)\n\n    # Act & Assert\n    with pytest.raises(ValueError) as excinfo:\n        servicio.crear_cita({'paciente_id': 999, 'fecha': '2024-01-15'})\n    assert 'paciente no encontrado' in str(excinfo.value).lower()\n    repo_mock.guardar.assert_not_called()"
-
-   ❌ INCORRECTO — define la clase inline (la prueba se prueba a sí misma):
-   "codigo_pytest": "def test_crear_cita():\n    class CitasServicio:\n        def crear_cita(self, datos):\n            raise ValueError('paciente no encontrado')\n    servicio = CitasServicio()\n    with pytest.raises(ValueError):\n        servicio.crear_cita({'paciente_id': 999})"
-
-   ❌ INCORRECTO — mock trivial que siempre pasa:
-   "codigo_pytest": "def test_crear_cita():\n    mock = Mock()\n    mock.crear_cita.return_value = True\n    assert mock.crear_cita({}) == True"
-
-3. CAMPO codigo_implementacion — CONTRATO PARA EL DESARROLLADOR:
-
-   Este campo contiene la clase/función mínima que el desarrollador debe crear en su
-   proyecto para que la prueba pase. Es una guía de implementación, NO va dentro del test.
-
-   ✅ CORRECTO:
-   "codigo_implementacion": "# Archivo: citas/servicios.py\n\nclass CitasServicio:\n    def __init__(self, repo):\n        self.repo = repo\n\n    def crear_cita(self, datos):\n        paciente = self.repo.buscar_paciente(datos['paciente_id'])\n        if paciente is None:\n            raise ValueError('Paciente no encontrado')\n        return self.repo.guardar(datos)"
-
-4. NOMENCLATURA:
-   Formato: test_[accion]_[condicion]_[resultado]
-   Ejemplos:
-   - test_crear_cita_paciente_inexistente_lanza_error
-   - test_crear_cita_fecha_invalida_lanza_error
-   - test_crear_cita_datos_validos_retorna_cita_guardada
-
-5. ESTRUCTURA INTERNA DEL campo codigo_pytest:
-   a) Imports: unittest.mock, pytest, y el import del módulo real del proyecto
-   b) # Arrange: mocks de dependencias externas + datos de entrada
-   c) # Act: llamada al método bajo prueba (o with pytest.raises para errores)
-   d) # Assert: verificaciones del resultado y llamadas a mocks
-
-=== ESTRUCTURA JSON EXACTA ===
-
+Estructura exacta obligatoria:
 {
   "pruebas": [
     {
-      "nombre": "test_nombre_accion_condicion_resultado",
-      "descripcion": "Qué se prueba y qué resultado se espera (sin comillas dobles internas)",
-      "especificacion_relacionada": "ID o nombre de req/historia/caso",
+      "nombre": "test_componente_accion_condicion",
+      "descripcion": "Integración de múltiples componentes",
+      "especificacion_relacionada": "ID/nombre",
       "detalles": {
-        "objetivo": "Verificar que [clase].[metodo] se comporta correctamente cuando [condicion]",
-        "modulo_importacion": "from paquete.modulo import ClaseServicio",
-        "precondiciones": [
-          "El módulo paquete/modulo.py debe existir en el proyecto",
-          "La clase ClaseServicio debe aceptar un repositorio en el constructor"
-        ],
-        "pasos": [
-          {
-            "paso": 1,
-            "accion": "Configurar mock del repositorio con comportamiento específico",
-            "resultado_esperado": "Mock listo simulando la dependencia externa"
-          },
-          {
-            "paso": 2,
-            "accion": "Instanciar la clase real importada del proyecto inyectando el mock",
-            "resultado_esperado": "Instancia creada. Si falla aquí, el módulo aún no existe (red phase correcto)"
-          },
-          {
-            "paso": 3,
-            "accion": "Invocar el método bajo prueba con los datos de entrada",
-            "resultado_esperado": "Método ejecutado. Resultado o excepción según el escenario"
-          },
-          {
-            "paso": 4,
-            "accion": "Verificar el resultado y que los mocks fueron llamados correctamente",
-            "resultado_esperado": "Todos los asserts pasan"
-          }
-        ],
-        "codigo_pytest": "def test_nombre_accion_condicion_resultado():\n    from unittest.mock import Mock\n    import pytest\n    from paquete.modulo import ClaseServicio\n\n    # Arrange\n    repo_mock = Mock()\n    repo_mock.buscar.return_value = None\n    servicio = ClaseServicio(repo_mock)\n    datos_entrada = {'campo': 'valor', 'id': 1}\n\n    # Act & Assert\n    with pytest.raises(ValueError) as excinfo:\n        servicio.metodo(datos_entrada)\n    assert 'mensaje esperado' in str(excinfo.value).lower()\n    repo_mock.guardar.assert_not_called()",
-        "codigo_implementacion": "# Archivo: paquete/modulo.py\n# Este es el contrato mínimo que debes implementar para que la prueba pase.\n\nclass ClaseServicio:\n    def __init__(self, repo):\n        self.repo = repo\n\n    def metodo(self, datos):\n        resultado = self.repo.buscar(datos['id'])\n        if resultado is None:\n            raise ValueError('mensaje esperado')\n        return self.repo.guardar(datos)",
-        "datos_prueba": {
-          "entrada": "{'campo1': 'valor1', 'campo2': 123}",
-          "salida_esperada": "ValueError: mensaje esperado"
-        },
-        "criterios_aceptacion": [
-          "La prueba falla (ImportError) si el módulo no existe en el proyecto",
-          "La prueba falla (AttributeError) si la clase no tiene el método esperado",
-          "La prueba pasa solo cuando la implementación real cumple el contrato"
-        ],
-        "tipo_validacion": "funcional"
+        "objetivo": "Verificar interacción entre componentes",
+        "modulo_importacion": "from paquete.componentes import ComponentePrincipal",
+        "codigo_pytest": "def test_():\\n    from unittest.mock import Mock\\n    import pytest\\n    from paquete.componentes import ComponentePrincipal\\n    dep = Mock()\\n    dep.obtener.return_value = {'id': 1, 'estado': 'activo'}\\n    comp = ComponentePrincipal(dep)\\n    res = comp.procesar({'id': 1})\\n    assert res['exito'] is True\\n    dep.obtener.assert_called_once()",
+        "codigo_implementacion": "# Archivo: paquete/componentes.py\\nclass ComponentePrincipal:\\n    def __init__(self, dep):\\n        self.dep = dep\\n    def procesar(self, datos):\\n        obj = self.dep.obtener(datos['id'])\\n        if not obj:\\n            return {'exito': False, 'error': 'no encontrado'}\\n        return {'exito': True, 'datos': obj}"
       }
     }
   ]
 }
 
-=== REGLAS CRÍTICAS PARA EL CAMPO codigo_pytest ===
+=== REGLAS CRÍTICAS ===
 
-- Es un string donde los saltos de línea se representan como \n
-- NUNCA uses comillas dobles dentro del código Python — usa SOLO comillas simples
-- La función SIEMPRE empieza con "def test_"
-- SIEMPRE incluye "from [paquete].[modulo] import [Clase]" — nunca definas la clase inline
-- Todos los imports van DENTRO de la función
-- SOLO mockea dependencias externas (repositorio, BD, API), nunca la clase bajo prueba
-- El código DEBE fallar con ImportError si el módulo no existe — ese es el comportamiento correcto en fase roja
+1. JSON PURO: Sin markdown, sin texto, comienza { termina }
+2. CÓDIGO PYTHON:
+   - Saltos: \n
+   - Solo comillas simples
+   - Imports dentro de función
+   - Importa módulo real del proyecto
+   - Mockea dependencias externas
+3. COBERTURA:
+   - Flujo exitoso entre componentes
+   - Errores de integración
+   - Casos de borde
+   - Estados inválidos
+4. TDD: Código que falla en rojo (ImportError si módulo no existe)
 
-=== REGLAS CRÍTICAS PARA EL CAMPO codigo_implementacion ===
-
-- Incluye el path del archivo como comentario: # Archivo: paquete/modulo.py
-- La clase debe coincidir exactamente con lo que se importa en codigo_pytest
-- La lógica debe ser mínima pero real — suficiente para que la prueba pase
-- Los saltos de línea se representan como \n
-
-=== CONSIDERACIONES TÉCNICAS ===
-
-- Usa assert con mensaje: assert x == y, 'Descripción del fallo esperado'
-- Para excepciones usa with pytest.raises(TipoError) as excinfo y verifica el mensaje
-- Verifica llamadas a mocks: repo_mock.metodo.assert_called_once_with(args_esperados)
-- Cada prueba es 100% independiente
-
-GENERA AHORA EL JSON. Recuerda: Solo JSON puro. Sin markdown. Sin texto antes ni después.
+GENERA AHORA. JSON PURO.

@@ -15,7 +15,7 @@ import os
 GITHUB_TOKEN_KEY = os.environ.get('GITHUB_TOKEN_KEY', '')
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
 from pathlib import Path
 
