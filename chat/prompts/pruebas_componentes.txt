@@ -19,8 +19,8 @@ Estructura exacta obligatoria:
       "detalles": {
         "objetivo": "Verificar interacción entre componentes",
         "modulo_importacion": "from paquete.componentes import ComponentePrincipal",
-        "codigo_pytest": "def test_():\\n    from unittest.mock import Mock\\n    import pytest\\n    from paquete.componentes import ComponentePrincipal\\n    dep = Mock()\\n    dep.obtener.return_value = {'id': 1, 'estado': 'activo'}\\n    comp = ComponentePrincipal(dep)\\n    res = comp.procesar({'id': 1})\\n    assert res['exito'] is True\\n    dep.obtener.assert_called_once()",
-        "codigo_implementacion": "# Archivo: paquete/componentes.py\\nclass ComponentePrincipal:\\n    def __init__(self, dep):\\n        self.dep = dep\\n    def procesar(self, datos):\\n        obj = self.dep.obtener(datos['id'])\\n        if not obj:\\n            return {'exito': False, 'error': 'no encontrado'}\\n        return {'exito': True, 'datos': obj}"
+        "codigo_pytest": "def test_componente():\\n    from unittest.mock import Mock\\n    import pytest\\n    from paquete.componentes import ComponentePrincipal\\n    dep = Mock()\\n    dep.obtener.return_value = {\\'id\\': 1, \\'estado\\': \\'activo\\'}\\n    comp = ComponentePrincipal(dep)\\n    res = comp.procesar({\\'id\\': 1})\\n    assert res[\\'exito\\'] is True\\n    dep.obtener.assert_called_once()",
+        "codigo_implementacion": "# Archivo: paquete/componentes.py\\nclass ComponentePrincipal:\\n    def __init__(self, dep):\\n        self.dep = dep\\n    def procesar(self, datos):\\n        obj = self.dep.obtener(datos[\\'id\\'])\\n        if not obj:\\n            return {\\'exito\\': False, \\'error\\': \\'no encontrado\\'}\\n        return {\\'exito\\': True, \\'datos\\': obj}"
       }
     }
   ]
@@ -29,17 +29,21 @@ Estructura exacta obligatoria:
 === REGLAS CRÍTICAS ===
 
 1. JSON PURO: Sin markdown, sin texto, comienza { termina }
-2. CÓDIGO PYTHON:
-   - Saltos: \n
-   - Solo comillas simples
+2. CÓDIGO PYTHON EN STRINGS:
+   - Saltos: \\n (barra-n)
+   - Comillas internas SIEMPRE escapadas: \\'comilla\\' (backslash-comilla)
    - Imports dentro de función
    - Importa módulo real del proyecto
    - Mockea dependencias externas
-3. COBERTURA:
+3. VALIDAR JSON:
+   - Toda comilla doble que abre, debe cerrar
+   - Ninguna comilla doble sin escapar en valores
+   - Estructura perfecta
+4. COBERTURA:
    - Flujo exitoso entre componentes
    - Errores de integración
    - Casos de borde
    - Estados inválidos
-4. TDD: Código que falla en rojo (ImportError si módulo no existe)
+5. TDD: Código que falla en rojo (ImportError si módulo no existe)
 
-GENERA AHORA. JSON PURO.
+GENERA AHORA. JSON PURO SIN ERRORES.

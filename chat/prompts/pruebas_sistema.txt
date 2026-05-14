@@ -23,8 +23,8 @@ INSTRUCCIONES CRÍTICAS:
         "objetivo": "Verificar flujo completo de caso de uso",
         "caso_uso_relacionado": "Nombre del caso",
         "modulo_importacion": "from paquete.aplicacion import AplicacionX",
-        "codigo_pytest": "def test_flujo():\\n    from unittest.mock import Mock\\n    from paquete.aplicacion import AplicacionX\\n\\n    # Arrange\\n    repo_mock = Mock()\\n    repo_mock.buscar.return_value = {'id': 1}\\n    app = AplicacionX(repo=repo_mock)\\n\\n    # Act\\n    resultado = app.flujo({'id': 1})\\n\\n    # Assert\\n    assert resultado['exito'] is True\\n    repo_mock.buscar.assert_called_once()",
-        "codigo_implementacion": "# Archivo: paquete/aplicacion.py\\n\\nclass AplicacionX:\\n    def __init__(self, repo):\\n        self.repo = repo\\n    def flujo(self, datos):\\n        encontrado = self.repo.buscar(datos['id'])\\n        if not encontrado:\\n            return {'exito': False, 'error': 'No encontrado'}\\n        return {'exito': True, 'datos': encontrado}"
+        "codigo_pytest": "def test_flujo():\\n    from unittest.mock import Mock\\n    from paquete.aplicacion import AplicacionX\\n\\n    # Arrange\\n    repo_mock = Mock()\\n    repo_mock.buscar.return_value = {\\'id\\': 1}\\n    app = AplicacionX(repo=repo_mock)\\n\\n    # Act\\n    resultado = app.flujo({\\'id\\': 1})\\n\\n    # Assert\\n    assert resultado[\\'exito\\'] is True\\n    repo_mock.buscar.assert_called_once()",
+        "codigo_implementacion": "# Archivo: paquete/aplicacion.py\\n\\nclass AplicacionX:\\n    def __init__(self, repo):\\n        self.repo = repo\\n    def flujo(self, datos):\\n        encontrado = self.repo.buscar(datos[\\'id\\'])\\n        if not encontrado:\\n            return {\\'exito\\': False, \\'error\\': \\'No encontrado\\'}\\n        return {\\'exito\\': True, \\'datos\\': encontrado}"
       }
     }
   ]
@@ -32,10 +32,11 @@ INSTRUCCIONES CRÍTICAS:
 
 3. REGLAS ESTRICTAS:
 - \\n para saltos en código Python
-- Solo comillas simples en código
-- NUNCA comillas dobles en valores JSON
+- Comillas dentro de código SIEMPRE escapadas: \\'comilla\\' (backslash-comilla)
+- NUNCA comillas dobles sin escapar en valores JSON
 - NUNCA markdown
 - JSON puro, nada más
+- VALIDA: Toda comilla que abre debe cerrar
 
 4. PRUEBAS DE SISTEMA VERIFICAN:
 - Flujo completo exitoso (happy path)
@@ -50,4 +51,4 @@ INSTRUCCIONES CRÍTICAS:
 - NUNCA código inline
 - VERIFICA respuesta Y llamadas a mocks
 
-GENERA AHORA. JSON VÁLIDO PURO.
+GENERA AHORA. JSON VÁLIDO PURO SIN ERRORES DE COMILLAS.

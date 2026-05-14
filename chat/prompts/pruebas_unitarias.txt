@@ -17,24 +17,25 @@ INSTRUCCIONES CRÍTICAS:
   "pruebas": [
     {
       "nombre": "test_accion_condicion_resultado",
-      "descripcion": "Breve descripción sin comillas dobles",
+      "descripcion": "Breve descripción sin caracteres especiales",
       "especificacion_relacionada": "ID/nombre relacionado",
       "detalles": {
         "objetivo": "Qué verifica",
         "modulo_importacion": "from paquete.modulo import Clase",
         "codigo_pytest": "def test_nombre():\\n    from unittest.mock import Mock\\n    import pytest\\n    from paquete.modulo import Clase\\n\\n    # Arrange\\n    mock = Mock()\\n    mock.metodo.return_value = dato\\n    clase = Clase(mock)\\n\\n    # Act & Assert\\n    with pytest.raises(ValueError):\\n        clase.metodo(entrada)\\n    mock.metodo.assert_called_once()",
-        "codigo_implementacion": "# Archivo: paquete/modulo.py\\n\\nclass Clase:\\n    def __init__(self, repo):\\n        self.repo = repo\\n    def metodo(self, datos):\\n        resultado = self.repo.metodo(datos)\\n        if not resultado:\\n            raise ValueError('error')\\n        return resultado"
+        "codigo_implementacion": "# Archivo: paquete/modulo.py\\n\\nclass Clase:\\n    def __init__(self, repo):\\n        self.repo = repo\\n    def metodo(self, datos):\\n        resultado = self.repo.metodo(datos)\\n        if not resultado:\\n            raise ValueError(\\'error\\')\\n        return resultado"
       }
     }
   ]
 }
 
-3. REGLAS ESTRICTAS:
-- El código Python en strings usa \\n para saltos (no caracteres literales de nueva línea)
-- SOLO comillas simples dentro de código Python
-- NUNCA comillas dobles en valores de string JSON
-- NUNCA bloques markdown
+3. REGLAS ESTRICTAS PARA JSON:
+- NUNCA comillas dobles sin escapar en valores
+- Código Python: SIEMPRE escapa comillas internas con \\ (ejemplo: \\'valor\\')
+- Saltos de línea en código: \\n (barra-n)
+- NUNCA markdown ```json ... ```
 - NUNCA texto fuera del JSON
+- El JSON DEBE ser 100% válido - prueba parseando mentalmente
 
 4. COBERTURA POR FUNCIONALIDAD:
 - Caso exitoso
@@ -49,4 +50,4 @@ INSTRUCCIONES CRÍTICAS:
 - MOCKEA solo dependencias externas
 - codigo_implementacion es la guía mínima para el desarrollador
 
-GENERA AHORA. JSON VÁLIDO PURO, NADA MÁS.
+GENERA AHORA. JSON VÁLIDO PURO, NADA MÁS. VALIDA CADA COMILLA.
